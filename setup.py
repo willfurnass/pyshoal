@@ -25,7 +25,7 @@ setup(
     author_email = 'will@thearete.co.uk',
     description='Particle Swarm Optimisation implementation.',
     license='GPL 3.0',
-    keywords='particle swarm optimisation optimization'
+    keywords='particle swarm optimisation optimization',
     url='http://pypi.python.org/pypi/PyShoal/',
-    long_description=read('README'),
+    long_description=read('README.txt'),
 )
