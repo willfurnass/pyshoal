@@ -11,7 +11,7 @@ def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
 setup(
-    name = 'PyShoal', # Y
+    name = 'pyshoal', # Y
     version = '0.1.1', # Y
     #packages=['pyshoal', 'pyshoal.test'],
     packages = find_packages(),
@@ -26,6 +26,6 @@ setup(
     description='Particle Swarm Optimisation implementation.',
     license='GPL 3.0',
     keywords='particle swarm optimisation optimization',
-    url='http://pypi.python.org/pypi/PyShoal/',
+    #url='http://pypi.python.org/pypi/PyShoal/',
     long_description=read('README.txt'),
 )
