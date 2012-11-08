@@ -3,4 +3,5 @@ build
 pyshoal.egg-info
 *.pyc
 *.c
+*.so
 
