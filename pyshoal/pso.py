@@ -164,59 +164,58 @@ class PSO(object):
                     (p + 1) % n  # particle to right
                     ]
 
-    def _tstep(self, itr, max_itr):
-        """Optimisation timestep function
+    def _velocity_updates(self, itr, max_itr):
+        """Update particle velocities.
 
         Keyword arguments:
-        itr -- current timestep
+        itr     -- current timestep
+        max_itr -- maximum number of timesteps
 
+        New velocities determined using
+         - the supplied velocity factor weights
+         - random variables to ensure the process is not deterministic
+         - the current velocity per particle
+         - the best performing position in each particle's personal history
+         - the best performing current position in each particle's neighbourhood
+
+        Spits out the following if logging level is INFO
+         - best neighbours per particle
+         - velocity components per particle
+         - velocities per particle
+
+        NB should only be called from the VCDM class's _tstep method.
         """
-        if self.topo in ("von_neumann", "ring"):
-            # For each particle:
-            #   find the 'relative' index of the best performing neighbour 
-            #   e.g. 0, 1 or 2 for particles in ring topologies
-            best_neigh_idx = self.neighbourhoods[np.arange(self._n_parts), 
-                                                 self.perf[self.neighbourhoods].argmax(axis=1)]
-            #   then generate a vector of the _positions_ of the best 
-            #   performing particles in each neighbourhood 
-            #   (the length of this vector will be equal to the number of particles)
-            best_neigh = self.pos[best_neigh_idx]
-
-        else: # self.topo == "gbest"
-            # For the 'global best' approach the best performing neighbour 
-            # is the best performing particle in the entire swarm
-            best_neigh = self.swarm_best
-
-        # Calculate new velocities 
         w_inertia = self.w_inertia_start + \
                         (self.w_inertia_end - self.w_inertia_start) * (itr / float(max_itr))
 
-        if logger.level < logging.INFO:
-            logger.debug("BEST NEIGHBOURS:   %s", [int(i[0]) for i in best_neigh])
-            logger.debug("INERTIA V COMP:    %s", [int(i[0]) for i in w_inertia * self.vel])
-            logger.debug("NOSTALGIA V COMP:  %s", [int(i[0]) for i in self.w_nostalgia * np_rand.rand() * (self.pbest - self.pos)])
-            logger.debug("SOCIETAL V COMP:   %s", [int(i[0]) for i in self.w_societal * np_rand.rand() * (best_neigh - self.pos)])
+        inertia_vel_comp   = w_inertia * self.vel
+        nostalgia_vel_comp = self.w_nostalgia * np_rand.rand() * (self.pbest - self.pos)
+        societal_vel_comp  = self.w_societal * np_rand.rand() * (self.best_neigh - self.pos)
 
-        # Calculate a new velocity using 
-        #  - the supplied velocity factor weights
-        #  - random variables to ensure the process is not deterministic
-        #  - the current velocity per particle
-        #  - the best performing position in each particle's personal history
-        #  - the best performing current position in each particle's neighbourhood
-        self.vel = w_inertia * self.vel + \
-                   self.w_nostalgia * np_rand.rand() * (self.pbest - self.pos) + \
-                   self.w_societal * np_rand.rand() * (best_neigh - self.pos)
+        self.vel = inertia_vel_comp + nostalgia_vel_comp + societal_vel_comp
 
         if logger.level < logging.INFO:
-            logger.debug("VELOCITIES:        %s", [float(i[0]) for i in self.vel])
+            logger.debug("BEST NEIGHBOURS:   {}".format(self.best_neigh))
+            logger.debug("INERTIA V COMP:    {}".format(inertial_vel_comp))
+            logger.debug("NOSTALGIA V COMP:  {}".format(nostalgia_vel_comp)) 
+            logger.debug("SOCIETAL V COMP:   {}".format(societal_vel_comp))
+            logger.debug("VELOCITIES:        {}".format(self.vel))
+            
+    def _bounds_checking(self):
+        """Apply restrictive damping if position updates have caused particles 
+        to leave problem space boundaries.
 
-        # Update each particle's position using the new velocity 
-        self.pos += self.vel
-        
-        # Bound checking: Restricted damping (Xu and Rahmat-Samii, 2007)
+        Restrictive damping explained in:
+        Xu, S., Rahmat-Samii, Y. (2007). Boundary conditions in particle swarm 
+        optimization revisited. IEEE Transactions on Antennas and Propagation, 
+        vol 55, pp 760-765.
+
+        """
         too_low = self.pos < self.lower_bounds
         too_high = self.pos > self.upper_bounds
-        self.pos = self.pos.clip(self.lower_bounds, self.upper_bounds)
+
+        # Ensure all particles within bounds of problem space
+        self.pos.clip(self.lower_bounds, self.upper_bounds, out = self.pos)
 
         old_vel = self.vel.copy()
         self.vel[too_low | too_high] *= -1. * np_rand.random((self.vel[too_low | too_high]).shape)
@@ -229,6 +228,40 @@ class PSO(object):
         too_high = self.pos > self.upper_bounds
         if np.any(too_low) or np.any(too_high):
             raise Exception("Need multiple-pass bounds checking")
+
+    def _tstep(self, itr, max_itr):
+        """Optimisation timestep function
+
+        Keyword arguments:
+        itr -- current timestep
+        max_itr -- maximum number of timesteps
+
+        """
+        if self.topo in ("von_neumann", "ring"):
+            # For each particle:
+            #   find the 'relative' index of the best performing neighbour 
+            #   e.g. 0, 1 or 2 for particles in ring topologies
+            best_neigh_idx = self.neighbourhoods[np.arange(self._n_parts), 
+                                                 self.perf[self.neighbourhoods].argmax(axis=1)]
+            #   then generate a vector of the _positions_ of the best 
+            #   performing particles in each neighbourhood 
+            #   (the length of this vector will be equal to the number of particles)
+            self.best_neigh = self.pos[best_neigh_idx]
+
+        else: # self.topo == "gbest"
+            # For the 'global best' approach the best performing neighbour 
+            # is the best performing particle in the entire swarm
+            self.best_neigh = self.swarm_best
+
+        # Update the velocity and position of each particle
+        self._velocity_updates(itr, max_itr)
+        self.pos += self.vel
+
+        # Check that all particles within problem boundaries; 
+        # if not move to edges of prob space and 
+        # flip signs of and dampen velocity components that took particles 
+        # over boundaries
+        self._bounds_checking()
 
         # Cache the current performance per particle
         self.perf = self.obj_func_np(*self.pos.T)
@@ -243,12 +276,11 @@ class PSO(object):
         self.swarm_best_perf = self.perf.max()
 
         if logger.level < logging.INFO:
-            logger.debug("NEW POS:           %s", self.pos)
-            logger.debug("NEW PERF:          %s", self.perf)
-            logger.debug("SWARM BEST POS:    %s", self.swarm_best)
-            logger.debug("SWARM BEST PERF:   %s", self.swarm_best_perf)
-        
-        #logger.info("SWARM BEST:    %s -> %f" % (self.swarm_best, self.swarm_best_perf))
+            logger.debug("NEW POS:           {}".format(self.pos))
+            logger.debug("NEW PERF:          {}".format(self.perf))
+            logger.debug("SWARM BEST POS:    {}".format(self.swarm_best))
+            logger.debug("SWARM BEST PERF:   {}".format(self.swarm_best_perf))
+
         return self.swarm_best, self.swarm_best_perf
     
     def plot_swarm(self, itr, xlims, ylims, contours_delta = None, sleep_dur = 0.1, save_plots = False):

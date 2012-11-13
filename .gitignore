@@ -4,4 +4,4 @@ pyshoal.egg-info
 *.pyc
 *.c
 *.so
-
+*swp
