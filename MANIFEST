@@ -6,4 +6,6 @@ pyshoal/__init__.pyc
 pyshoal/pso.py
 pyshoal/pso.pyc
 pyshoal/similarity_metrics.py
+pyshoal/similarity_metrics.pyc
+pyshoal/version.py
 pyshoal/test/__init__.py

@@ -1,7 +1,8 @@
+from __future__ import division
+
 import numpy as np
 import scipy.stats as sp_stats
 
-from __future__ import division
 
 def nash_sutcliffe(obs_v, pred_v):
     """
