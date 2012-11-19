@@ -23,7 +23,7 @@ def set_log_level(level):
     logger.handlers[0].setLevel(level)
 
 class PSO(object):
-    def __init__(self, obj_func, init_var_ranges, n_parts = 5, topo="gbest", weights = [0.9, 0.4, 1.5, 2.5], opt_args=None, bounds=None):
+    def __init__(self, obj_func, init_var_ranges, n_parts = 5, topo="gbest", weights = [0.9, 0.4, 1.5, 2.5], opt_args = None, bounds = None, minimise = True):
         """Initialise the positions and velocities of the particles, the particle memories and the swarm-level params.
 
         Keyword args:
@@ -43,6 +43,7 @@ class PSO(object):
           the length of the former being the number of dimensions 
           e.g. ((0,10),(0,30)) for 2 dims
           Restricted damping is used (Xu and Rahmat-Samii (2007)) when particles go out of bounds.
+        minimise -- whether to find global minima or maxima for the objective function
 
         Notes on topologies:
         Two neighbourhood topologies have been implemented.  
@@ -67,6 +68,8 @@ class PSO(object):
          - the other two velocity component weights are both 2.0
 
         """
+
+        self.minimise = minimise
 
         if opt_args:
             # Create partial function through baking arguments into the objective function
@@ -116,9 +119,13 @@ class PSO(object):
         self.pbest_perf = self.perf
 
         # Initialise swarm best position (array of length n_dims)
-        self.swarm_best = self.pos[self.perf.argmax()]
         # and the swarm best performance  (scalar)
-        self.swarm_best_perf = self.perf.max()
+        if self.minimise:
+            self.swarm_best = self.pos[self.perf.argmin()]
+            self.swarm_best_perf = self.perf.min()
+        else:
+            self.swarm_best = self.pos[self.perf.argmax()]
+            self.swarm_best_perf = self.perf.max()
         
         if logger.level < logging.INFO:
             logger.debug("INIT POS:  %s", self.pos)
@@ -241,7 +248,11 @@ class PSO(object):
             # For each particle:
             #   find the 'relative' index of the best performing neighbour 
             #   e.g. 0, 1 or 2 for particles in ring topologies
-            best_neigh_idx = self.neighbourhoods[np.arange(self._n_parts), 
+            if self.minimise:
+                best_neigh_idx = self.neighbourhoods[np.arange(self._n_parts), 
+                                                 self.perf[self.neighbourhoods].argmin(axis=1)]
+            else:
+                best_neigh_idx = self.neighbourhoods[np.arange(self._n_parts), 
                                                  self.perf[self.neighbourhoods].argmax(axis=1)]
             #   then generate a vector of the _positions_ of the best 
             #   performing particles in each neighbourhood 
@@ -267,13 +278,20 @@ class PSO(object):
         self.perf = self.obj_func_np(*self.pos.T)
 
         # Update each particle's personal best position if an improvement has been made this timestep
-        improvement_made_idx = self.perf > self.pbest_perf
+        if self.minimise:
+            improvement_made_idx = self.perf < self.pbest_perf
+        else:
+            improvement_made_idx = self.perf > self.pbest_perf
         self.pbest[improvement_made_idx] = self.pos[improvement_made_idx]
         self.pbest_perf[improvement_made_idx] = self.perf[improvement_made_idx]
 
         # Update swarm best position with current best particle position
-        self.swarm_best = self.pos[self.perf.argmax()]
-        self.swarm_best_perf = self.perf.max()
+        if self.minimise:
+            self.swarm_best = self.pos[self.perf.argmin()]
+            self.swarm_best_perf = self.perf.min()
+        else:
+            self.swarm_best = self.pos[self.perf.argmax()]
+            self.swarm_best_perf = self.perf.max()
 
         if logger.level < logging.INFO:
             logger.debug("NEW POS:           {}".format(self.pos))
@@ -427,7 +445,7 @@ if __name__ == '__main__':
     else:
         raise Exception("objective function {} not supported.".format(sys.argv[1]))
 
-    #o = PSO(obj_func = obj_func, init_var_ranges = ((-500,500),(-500,500)), n_parts = 144, topo="gbest", weights=[0.9, 0.4, 1.0, 2.5])
-    o = PSO(obj_func = obj_func, init_var_ranges = ((-50,50),(-50,50)), n_parts = 64, topo="von_neumann", weights=[0.4, 0.4, 2.0, 2.0], bounds=((-5,50),(-5,50)))
+    #o = PSO(obj_func = obj_func, init_var_ranges = ((-500,500),(-500,500)), n_parts = 144, topo="gbest", weights=[0.9, 0.4, 1.0, 2.5], minimise=False)
+    o = PSO(obj_func = obj_func, init_var_ranges = ((-50,50),(-50,50)), n_parts = 64, topo="von_neumann", weights=[0.4, 0.4, 2.0, 2.0], bounds=((-5,50),(-5,50)), minimise=False)
     res = o.opt(max_itr = 100, tol_thres = (0.01,0.01), tol_win=5, plot=True, save_plots=False)
     logger.info("\nBest position: {}\nBest perf: {}\nNum iter: {}\n".format(*res))

@@ -9,7 +9,7 @@ def nash_sutcliffe(obs_v, pred_v):
     Nash Sutcliffe Efficiency Index correlation metric
 
     Nash, J. E. and Sutcliffe, J. V. (1970).  River flow forecasting through conceptual models 
-    part I — A discussion of principles, J. Hydrology, 10(3), pp. 282-290, ISSN 0022-1694, 
+    part I - A discussion of principles, J. Hydrology, 10(3), pp. 282-290, ISSN 0022-1694, 
     DOI 10.1016/0022-1694(70)90255-6
     """
     if obs_v.shape != pred_v.shape and obs_v.ndim != 1 and pred_v.ndim != 1:
