@@ -28,7 +28,7 @@ def read(fname):
 setup(
     name = 'pyshoal', # Y
     version = '0.1.2', # Y
-    packages=['pyshoal', 'pyshoal.test'],
+    packages=['pyshoal'],#, 'pyshoal.test'],
 
     install_requires = [
         "numpy >= 1.5.1",

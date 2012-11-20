@@ -28,7 +28,7 @@ class PSO(object):
 
         Keyword args:
         obj_func -- Objective function
-        init_var_ranges -- tuple of (lower_bound, upper_bound) tuples, 
+        init_var_ranges -- tuple of (lower_bound, upper_bound) tuples (or equivalent ndarray), 
           the length of the former being the number of dimensions 
           e.g. ((0,10),(0,30)) for 2 dims
         n_parts -- number of particles
@@ -39,7 +39,7 @@ class PSO(object):
           societal velocity components
         opt_args -- dictionary of keyword arguments to be passed to the objective function;
                     these arguments do not correspond to variables that are to be optimised
-        bounds -- tuple of (lower_bound, upper_bound) tuples, 
+        bounds -- tuple of (lower_bound, upper_bound) tuples (or equivalent ndarray), 
           the length of the former being the number of dimensions 
           e.g. ((0,10),(0,30)) for 2 dims
           Restricted damping is used (Xu and Rahmat-Samii (2007)) when particles go out of bounds.
@@ -86,7 +86,7 @@ class PSO(object):
         
         # Set ranges used to bound initial particle positions
         # NB: should really parse init_var_ranges to ensure that it is valid
-        self.init_pos_min, self.init_pos_max = np.array(init_var_ranges).T
+        self.init_pos_min, self.init_pos_max = np.asfarray(init_var_ranges).T
 
         # Set number of particles
         self._n_parts = n_parts
@@ -110,13 +110,13 @@ class PSO(object):
                                    (self._n_parts, self._n_dims))
 
         # Determine the problem space boundaries...
-        self.lower_bounds, self.upper_bounds = np.array(bounds).T
+        self.lower_bounds, self.upper_bounds = np.asfarray(bounds).T
 
         # then find the performance per particle (matrix of n_parts rows and n_dims cols)
         self.perf = self.obj_func_np(*self.pos.T) 
 
         # The personal best position per particle is initially the starting position
-        self.pbest_perf = self.perf
+        self.pbest_perf = self.perf.copy()
 
         # Initialise swarm best position (array of length n_dims)
         # and the swarm best performance  (scalar)
@@ -138,7 +138,6 @@ class PSO(object):
             self._cache_neighbourhoods()
         elif self.topo != "gbest":
             raise Exception("Topology '{}' not recognised/supported".format(self.topo))
-
 
     def _cache_neighbourhoods(self):
         """Determines the indices of the neighbours per particle and stores them in the neighbourhoods attribute.
@@ -364,7 +363,8 @@ class PSO(object):
 
         Keyword args:
         max_itr -- maximum number of iterations
-        tol_thres -- convergence tolerance vector (optional); length must be equal to the number of dimensions
+        tol_thres -- convergence tolerance vector (optional); length must be equal to 
+                     the number of dimensions.  Can be ndarray, tuple or list.
         tol_win -- number of timesteps for which the swarm best position must be 
                    less than convergence tolerances for the funtion to then return a result
 
@@ -378,10 +378,10 @@ class PSO(object):
             plt.ion()
 
         self.swarm_best_hist = np.zeros((max_itr, self._n_dims))
-        self.swarm_best_perf_hist = np.zeros((max_itr, self._n_dims))
+        self.swarm_best_perf_hist = np.zeros((max_itr,))
 
-        self.tol_thres = tol_thres
-        if len(self.tol_thres) != self._n_dims:
+        self.tol_thres = np.asfarray(tol_thres)
+        if self.tol_thres.shape != (self._n_dims,):
             raise Exception("The length of the tolerance vector must be equal to the number of dimensions")
 
         itr = 0
@@ -393,11 +393,11 @@ class PSO(object):
                 self.plot_swarm(itr, xlims = (-50,50), ylims = (-50,50), contours_delta = 1., sleep_dur = 0.001, save_plots = save_plots )
 
             # If the convergence tolerance has been reached then return
-            if self.tol_thres and itr > tol_win:
+            if self.tol_thres is not None and itr > tol_win:
                 win = self.swarm_best_hist[itr-tol_win+1:itr+1] 
                 if np.all(win.max(axis=0) - win.min(axis=0) < self.tol_thres):
-                   logger.debug("PSO converged in {} iterations.".format(itr))
-                   break
+                    logger.debug("PSO converged in {} iterations.".format(itr))
+                    break
             itr += 1
             if itr >= max_itr:
                 logger.info("PSO failed to converge within {} iterations.".format(max_itr))
