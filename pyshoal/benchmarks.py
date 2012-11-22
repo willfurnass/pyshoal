@@ -17,7 +17,7 @@ class Benchmark(object):
         if not np.abs(min_calc_val - self.optimal_perf) < (10 ** - float(perf_tol_dp)):
             raise Exception("Error when checking benchmark calcs for func {}: {} != perf of {}".format(self.name, min_calc_val, self.optimal_perf))
             
-    def opt(self, n_parts = 25, topo = 'gbest', weights = (0.9, 0.4, 1.5, 2.5), max_itr = 250, tol_win = 5):   
+    def opt(self, n_parts = 25, topo = 'gbest', weights = (0.9, 0.4, 2.1, 2.1), max_itr = 250, tol_win = 5):   
         # Bounds as single col of multiple rows with each of latter being min + max
         param_bounds = np.tile((self.lower_bound, self.upper_bound), (self.ndim, 1))
     
@@ -44,8 +44,10 @@ class BenchmarkResult(object):
         
     def check(self):
         """Are the optimisation results within the required tolerances for all params?"""
-        param_tols = 10 ** - (np.asfarray(self.benchmark.params_tol_dp))
-        return np.all(np.abs(self.swarm_best - self.benchmark.optimal_params) < param_tols)
+        #param_tols = 10 ** - (np.asfarray(self.benchmark.params_tol_dp))
+        #return np.all(np.abs(self.swarm_best - self.benchmark.optimal_params) < param_tols)
+        perf_tol = 10 ** - self.benchmark.perf_tol_dp
+        return np.abs(self.swarm_best_perf - self.benchmark.optimal_perf) < perf_tol
         
     def __str__(self):
         if self.check():
