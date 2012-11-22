@@ -62,6 +62,12 @@ class BenchmarkResult(object):
 
 # Specific benchmark functions and Benchmark objects
 
+def f_01(*x):
+    return np.sum(np.asarray(x) ** 2)
+bmark_01a = Benchmark(name = 'f_01a', f = f_01, ndim = 30, lower_bound = -5.12, upper_bound = 5.12, 
+                     optimal_params = np.ones(30) * 1e-4, optimal_perf = 3e-7, 
+                     params_tol_dp = np.ones(30) * 4, perf_tol_dp = 4)
+
 def f_16(x_0, x_1):
     return (4*(x_0**2)) - (2.1*(x_0**4)) + ((1/3.0)*(x_0**6)) + (x_0*x_1) - (4*(x_1**2)) + (4*(x_1**4))
 

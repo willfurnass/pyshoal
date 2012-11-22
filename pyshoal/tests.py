@@ -1,5 +1,9 @@
 from benchmarks import *
 
+def test_01a():
+    res_01a = bmark_01a.opt()
+    assert res_01a.check(), res_01a
+
 def test_16():
     res_16 = bmark_16.opt()
     assert res_16.check(), res_16
