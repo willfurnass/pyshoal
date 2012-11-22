@@ -23,50 +23,67 @@ def set_log_level(level):
     logger.handlers[0].setLevel(level)
 
 class PSO(object):
+    """
+    Particle Swarm Optimisation implementation
+
+    References:
+    Eberhart, R.C., Shi, Y., 2001. Particle swarm optimization: developments, 
+    applications and resources, in: Proceedings of the 2001 Congress on 
+    Evolutionary Computation. Presented at the Congress on Evolutionary 
+    Computation, pp. 81-86.
+
+    Kennedy, J., Mendes, R., 2002. Population structure and particle swarm 
+    performance. IEEE, pp. 1671-1676.
+
+    Xu, S., Rahmat-Samii, Y., 2007. Boundary conditions in particle swarm 
+    optimization revisited. IEEE Transactions on Antennas and Propagation, 
+    55, 760-765.
+
+    """
     def __init__(self, obj_func, init_var_ranges, n_parts = 5, topo="gbest", weights = [0.9, 0.4, 1.5, 2.5], opt_args = None, bounds = None, minimise = True):
         """Initialise the positions and velocities of the particles, the particle memories and the swarm-level params.
 
         Keyword args:
         obj_func -- Objective function
-        init_var_ranges -- tuple of (lower_bound, upper_bound) tuples (or equivalent ndarray), 
-          the length of the former being the number of dimensions 
-          e.g. ((0,10),(0,30)) for 2 dims
+        init_var_ranges -- tuple of (lower_bound, upper_bound) tuples (or 
+                           equivalent ndarray), the length of the former 
+                           being the number of dimensions e.g. ((0,10),(0,30))
+                           for 2 dimensions
         n_parts -- number of particles
         topo -- 'gbest', 'ring' or 'von_neumann'
-        weights -- 4-vector of weights for 
-          inertial (initial and final), 
-          nostalgic and 
-          societal velocity components
-        opt_args -- dictionary of keyword arguments to be passed to the objective function;
-                    these arguments do not correspond to variables that are to be optimised
-        bounds -- tuple of (lower_bound, upper_bound) tuples (or equivalent ndarray), 
-          the length of the former being the number of dimensions 
-          e.g. ((0,10),(0,30)) for 2 dims
-          Restricted damping is used (Xu and Rahmat-Samii (2007)) when particles go out of bounds.
+        weights -- 4-vector of weights for inertial (initial and final), 
+                   nostalgic and societal velocity components
+        opt_args -- dictionary of keyword arguments to be passed to the 
+                    objective function; these arguments do not correspond to 
+                    variables that are to be optimised
+        bounds -- tuple of (lower_bound, upper_bound) tuples (or equivalent 
+                  ndarray), the length of the former being the number of 
+                  dimensions e.g. ((0,10),(0,30)) for 2 dims.  
+                  Restricted damping is used (Xu and Rahmat-Samii, 2007) when 
+                  particles go out of bounds.
         minimise -- whether to find global minima or maxima for the objective function
 
+        Notes on swarm and neighbourhood sizes (Eberhart and Shi, 2001)
+        Swarm size of 20-50 most common.
+        Neighbourhood size of ~15% swarm size used in many applications.
+
         Notes on topologies:
-        Two neighbourhood topologies have been implemented.  
-        These are both social rather than geographic topologies and 
-        differ in terms of degree of connectivity (number of neighbours per particle) but
-        not in terms of clustering (number of common neighbours of two particles).
-        The supported topologies are:
+        Two neighbourhood topologies have been implemented (see Kennedy and 
+        Mendes, 2002).  These are both social rather than geographic 
+        topologies and differ in terms of degree of connectivity (number of 
+        neighbours per particle) but not in terms of clustering (number of 
+        common neighbours of two particles).  The supported topologies are:
+        ring -- exactly two neighbours / particle
+        von_neumann -- exactly four neighbours / particle (swarm size must 
+                       be square number)
+        gbest -- the neighbourhood of each particle is the entire swarm 
 
-        ring: exactly two neighbours / particle
-        von_neumann: exactly four neighbours / particle (swarm size must be square number)
-        gbest: the neighbourhood of each particle is the entire swarm 
-
-        Notes on weights:
-        In MIT course ESD.77 it is suggested that the following ranges are used:
-        inertial:  0.4 - 1.4
-        nostalgic: 1.5 - 2.0
-        societal:  2 - 2.5
-        http://ocw.mit.edu/courses/engineering-systems-division/esd-77-multidisciplinary-system-design-optimization-spring-2010/lecture-notes/MITESD_77S10_lec12.pdf
-
-        In Xu and Rahmat-Samii (2007) it is suggested that 
-         - the inertia weight start at 0.9 and be reduced linearly to 0.4 over the simulation
-         - the other two velocity component weights are both 2.0
-
+        Notes on weights (Eberhart and Shi, 2001, Xu and Rahmat-Samii, 2007):
+        inertia weight   -- decrese linearly from 0.9 to 0.4 over a run
+        nostalgia weight -- 2.05
+        societal weight -- 2.05
+        NB sum of nostalgia and societal weights should be >4 if using
+        Clerc's constriction factor.
         """
 
         self.minimise = minimise
@@ -142,7 +159,7 @@ class PSO(object):
     def _cache_neighbourhoods(self):
         """Determines the indices of the neighbours per particle and stores them in the neighbourhoods attribute.
 
-        Currently the Von Neumann lattice and Ring topologies are supported.
+        Currently the Von Neumann lattice and Ring topologies are supported (see Kennedy and Mendes, 2002).
 
         """
         n = self._n_parts
@@ -170,12 +187,13 @@ class PSO(object):
                     (p + 1) % n  # particle to right
                     ]
 
-    def _velocity_updates(self, itr, max_itr):
+    def _velocity_updates(self, itr, max_itr, use_constr_factor = True):
         """Update particle velocities.
 
         Keyword arguments:
         itr     -- current timestep
         max_itr -- maximum number of timesteps
+        use_constr_factor -- whether Clerc's constriction factor should be applied
 
         New velocities determined using
          - the supplied velocity factor weights
@@ -184,11 +202,8 @@ class PSO(object):
          - the best performing position in each particle's personal history
          - the best performing current position in each particle's neighbourhood
         
-        Max velocities clamped to length of problem space boundaries as per: 
-        Eberhart, R.C., Shi, Y., 2001. Particle swarm optimization: 
-        developments, applications and resources, in: Proceedings 
-        of the 2001 Congress on Evolutionary Computation. Presented 
-        at the Congress on Evolutionary Computation, pp. 81-86.
+        Max velocities clamped to length of problem space boundaries and
+        Clerc's constriction factor applied as per Eberhart and Shi (2001) 
 
         Spits out the following if logging level is INFO
          - best neighbours per particle
@@ -205,6 +220,14 @@ class PSO(object):
         societal_vel_comp  = self.w_societal * np_rand.rand() * (self.best_neigh - self.pos)
 
         self.vel = inertia_vel_comp + nostalgia_vel_comp + societal_vel_comp
+
+        # Constriction factor
+        if use_constr_factor:
+            phi = self.w_nostalgia + self.w_societal
+            if not phi > 4:
+                raise Exception("Cannot apply constriction factor as sum of societal and nostalgic weights <= 4") 
+            K = 2. / np.abs(2. - phi - np.sqrt((phi**2) - (4.*phi)))
+            self.vel *= K
 
         # Velocity clamping
         self.vel.clip(self.lower_bounds - self.upper_bounds,
@@ -457,6 +480,6 @@ if __name__ == '__main__':
         raise Exception("objective function {} not supported.".format(sys.argv[1]))
 
     #o = PSO(obj_func = obj_func, init_var_ranges = ((-500,500),(-500,500)), n_parts = 144, topo="gbest", weights=[0.9, 0.4, 1.0, 2.5], minimise=False)
-    o = PSO(obj_func = obj_func, init_var_ranges = ((-50,50),(-50,50)), n_parts = 64, topo="von_neumann", weights=[0.4, 0.4, 2.0, 2.0], bounds=((-5,50),(-5,50)), minimise=False)
+    o = PSO(obj_func = obj_func, init_var_ranges = ((-50,50),(-50,50)), n_parts = 64, topo="von_neumann", weights=[0.9, 0.4, 2.1, 2.1], bounds=((-5,50),(-5,50)), minimise=False)
     res = o.opt(max_itr = 100, tol_thres = (0.01,0.01), tol_win=5, plot=True, save_plots=False)
     logger.info("\nBest position: {}\nBest perf: {}\nNum iter: {}\n".format(*res))
