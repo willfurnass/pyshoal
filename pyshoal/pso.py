@@ -183,6 +183,12 @@ class PSO(object):
          - the current velocity per particle
          - the best performing position in each particle's personal history
          - the best performing current position in each particle's neighbourhood
+        
+        Max velocities clamped to length of problem space boundaries as per: 
+        Eberhart, R.C., Shi, Y., 2001. Particle swarm optimization: 
+        developments, applications and resources, in: Proceedings 
+        of the 2001 Congress on Evolutionary Computation. Presented 
+        at the Congress on Evolutionary Computation, pp. 81-86.
 
         Spits out the following if logging level is INFO
          - best neighbours per particle
@@ -199,6 +205,11 @@ class PSO(object):
         societal_vel_comp  = self.w_societal * np_rand.rand() * (self.best_neigh - self.pos)
 
         self.vel = inertia_vel_comp + nostalgia_vel_comp + societal_vel_comp
+
+        # Velocity clamping
+        self.vel.clip(self.lower_bounds - self.upper_bounds,
+                      self.upper_bounds - self.lower_bounds,
+                      out = self.vel)
 
         if logger.level < logging.INFO:
             logger.debug("BEST NEIGHBOURS:   {}".format(self.best_neigh))
