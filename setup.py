@@ -27,7 +27,7 @@ def read(fname):
 
 setup(
     name = 'pyshoal', # Y
-    version = '0.1.2', # Y
+    version = '0.1.3', # Y
     packages=['pyshoal'],#, 'pyshoal.test'],
 
     install_requires = [

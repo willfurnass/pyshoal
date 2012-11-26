@@ -5,7 +5,7 @@ from time import sleep
 import matplotlib.pyplot as plt
 import sys
 
-import pdb
+import collections
 
 import logging
 #logger.basicConfig(format='%(levelname)s: %(message)s', level=logger.INFO)
@@ -21,6 +21,17 @@ logger.addHandler(_handler)
 def set_log_level(level):
     logger.setLevel(level)
     logger.handlers[0].setLevel(level)
+
+def _tupleify(arr_2d, opt_arg_tuple):
+    """Helper function for PSO._eval_perf(self)
+    
+    Takes numpy.ndarray with r rows where each row has c columns and a tuple.
+    Returns a tuple of tuples where the ith inner tuple is the input tuple 
+    prepended by the elements of row[i] and there is one inner tuple for each of the
+    r rows.
+    
+    """
+    return tuple(arr_2d.T) + tuple(([i] * arr_2d.shape[0] for i in opt_arg_tuple))
 
 class PSO(object):
     """
@@ -40,7 +51,7 @@ class PSO(object):
     55, 760-765.
 
     """
-    def __init__(self, obj_func, init_var_ranges, n_parts = 5, topo="gbest", weights = [0.9, 0.4, 1.5, 2.5], opt_args = None, bounds = None, minimise = True):
+    def __init__(self, obj_func, init_var_ranges, n_parts = 5, topo="gbest", weights = [0.9, 0.4, 2.1, 2.1], opt_args = None, bounds = None, minimise = True, parallel_view = None):
         """Initialise the positions and velocities of the particles, the particle memories and the swarm-level params.
 
         Keyword args:
@@ -62,6 +73,9 @@ class PSO(object):
                   Restricted damping is used (Xu and Rahmat-Samii, 2007) when 
                   particles go out of bounds.
         minimise -- whether to find global minima or maxima for the objective function
+        parallel_view -- use the IPython parallel cluster associated with a particular
+                         IPython.parallel.client.view.LoadBalancedView instance enable
+                         the parallel execution of objective functions at each timestep.
 
         Notes on swarm and neighbourhood sizes (Eberhart and Shi, 2001)
         Swarm size of 20-50 most common.
@@ -84,22 +98,32 @@ class PSO(object):
         societal weight -- 2.05
         NB sum of nostalgia and societal weights should be >4 if using
         Clerc's constriction factor.
+
+        Notes on parallel objective function evaluation:
+        This may not be efficient if a single call to the objective function
+        takes very little time to execute.
         """
 
+        # Whether to minimise or maximise the objective function
         self.minimise = minimise
 
+        # Store refs to the objective function and opt_args
+        # which are then used if an IPython.parallel view is used
+        # to evaluate the objective function in parallel per PSO timestep
+        self.obj_func = obj_func
+        self.opt_args = opt_args
+        
+        # If the objective function evaluation is not to be done in parallel
+        # then we create a vectorised partial function from the objecive function, 
+        # baking in arguments that are not parameters to be optimised
         if opt_args:
-            # Create partial function through baking arguments into the objective function
-            # that are not parameters to be optimised
             obj_partial_func = lambda *args : obj_func(*args+tuple(opt_args))
-
-            # Vectorize the objective function if it has not been done so already
             self.obj_func_np = np.vectorize(obj_partial_func)
         else:
             self.obj_func_np = np.vectorize(obj_func)
 
         # Initialise velocity weights
-        (self.w_inertia_start, self.w_inertia_end, self.w_nostalgia, self.w_societal) = weights
+        self.set_weight(weights)
         
         # Set ranges used to bound initial particle positions
         # NB: should really parse init_var_ranges to ensure that it is valid
@@ -129,13 +153,14 @@ class PSO(object):
         # Determine the problem space boundaries...
         self.lower_bounds, self.upper_bounds = np.asfarray(bounds).T
 
-        # then find the performance per particle (matrix of n_parts rows and n_dims cols)
-        self.perf = self.obj_func_np(*self.pos.T) 
+        # then find the performance per particle
+        # (updates self.perf, a matrix of self._n_parts rows and self._n_dims cols)
+        self._eval_perf(parallel_view)
 
         # The personal best position per particle is initially the starting position
         self.pbest_perf = self.perf.copy()
 
-        # Initialise swarm best position (array of length n_dims)
+        # Initialise swarm best position (array of length self._n_dims)
         # and the swarm best performance  (scalar)
         if self.minimise:
             self.swarm_best = self.pos[self.perf.argmin()]
@@ -150,18 +175,58 @@ class PSO(object):
             logger.debug("INIT VEL:  %s", self.vel)
 
         # Determine particle neighbours if a swarm topology has been chosen
-        self.topo = topo
-        if self.topo in ("von_neumann", "ring"):
-            self._cache_neighbourhoods()
-        elif self.topo != "gbest":
-            raise Exception("Topology '{}' not recognised/supported".format(self.topo))
+        self._cache_neighbourhoods(topo)
 
-    def _cache_neighbourhoods(self):
+    def set_weight(self, w_inertia_start = None, w_intertia_end = None, w_nostalgia = None, w_societal = None):
+        """
+        Set velocity component weights
+        
+        Keyword arguments:
+        w_inertia_start -- particle inertia weight at first iteration (recommended value: 0.9)
+        w_inertia_end -- particle inertia weight at maximum possible iteration (recommended value: 0.4)
+        w_nostalgia   -- weight for velocity component in direction of particle historical best performance (recommended value: 2.1)
+        w_societal    -- weigth for velocity component in direction of current best performing particle in neighbourhood (recommended value: 2.1)
+
+        NB can set all four weights simultanously by passing the method an iterable object of length 4 e.g.:
+
+        weights = [0.9, 0.4, 2.1, 2.1]
+        my_pyshoal.set_weight(weights)
+        """
+        if isinstance(w_inertia_start, collections.Iterable) and len(w_inertia_start) == 4 and None not in w_inertia_start:
+            self.w_inertia_start, self.w_inertia_end, self.w_nostalgia, self.w_societal = w_inertia_start
+        else:
+            if w_inertia_start is not None:
+                self.w_inertia_start = w_inertia_start
+            if w_inertia_end   is not None:
+                self.w_inertia_end   = w_inertia_end
+            if w_nostalgia     is not None:
+                self.w_nostalgia    = w_nostalgia
+            if w_societal      is not None:
+                self.w_societal    = w_societal
+
+    def _eval_perf(self, parallel_view = None):
+        if parallel_view is None:
+            self.perf = self.obj_func_np(*self.pos.T)
+        else:
+            self.perf = np.array(parallel_view.map(self.obj_func, *_tupleify(self.pos, self.opt_args)).get())
+
+
+    def _cache_neighbourhoods(self, topo):
         """Determines the indices of the neighbours per particle and stores them in the neighbourhoods attribute.
 
-        Currently the Von Neumann lattice and Ring topologies are supported (see Kennedy and Mendes, 2002).
+        Currently only the following topologies are supported (see Kennedy and Mendes, 2002):
+
+        'gbest' - Global best (no local particle neighbourhoods)
+        'von_neumann' -- Von Neumann lattice (each particle communicates with four social neighbours)
+        'ring' -- Ring topology (each particle communicates with two social neighbours)
 
         """
+        self.topo = topo
+        if self.topo == "gbest":
+            return
+        if self.topo not in ("von_neumann", "ring"):
+            raise Exception("Topology '{}' not recognised/supported".format(self.topo))
+
         n = self._n_parts
 
         if self.topo == "von_neumann":
@@ -269,7 +334,7 @@ class PSO(object):
         if np.any(too_low) or np.any(too_high):
             raise Exception("Need multiple-pass bounds checking")
 
-    def _tstep(self, itr, max_itr):
+    def _tstep(self, itr, max_itr, parallel_view = None):
         """Optimisation timestep function
 
         Keyword arguments:
@@ -308,7 +373,9 @@ class PSO(object):
         self._bounds_checking()
 
         # Cache the current performance per particle
-        self.perf = self.obj_func_np(*self.pos.T)
+        ### TIDY ME UP ###
+        #self.perf = self.obj_func_np(*self.pos.T)
+        self._eval_perf(parallel_view)
 
         # Update each particle's personal best position if an improvement has been made this timestep
         if self.minimise:
@@ -392,7 +459,8 @@ class PSO(object):
             self._plt_fig.savefig("%03d.png" % itr)
         sleep(sleep_dur)
 
-    def opt(self, max_itr=100, tol_thres=None, tol_win=5, plot=False, save_plots=False):
+    def opt(self, max_itr = 100, tol_thres = None, tol_win = 5, parallel_view = False, 
+            plot = False, save_plots = False):
         """Attempt to find the global optimum objective function.
 
         Keyword args:
@@ -421,7 +489,8 @@ class PSO(object):
         itr = 0
         while itr < max_itr:
             # Run timestep code
-            self.swarm_best_hist[itr], self.swarm_best_perf_hist[itr] = self._tstep(itr, max_itr)
+            self.swarm_best_hist[itr], self.swarm_best_perf_hist[itr] = \
+                    self._tstep(itr, max_itr, parallel_view)
             
             if plot:
                 self.plot_swarm(itr, xlims = (-50,50), ylims = (-50,50), contours_delta = 1., sleep_dur = 0.001, save_plots = save_plots )
