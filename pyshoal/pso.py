@@ -75,7 +75,8 @@ class PSO(object):
         minimise -- whether to find global minima or maxima for the objective function
         parallel_view -- use the IPython parallel cluster associated with a particular
                          IPython.parallel.client.view.LoadBalancedView instance enable
-                         the parallel execution of objective functions at each timestep.
+                         the parallel execution of objective functions when calculating
+                         the initial performance per particle.
 
         Notes on swarm and neighbourhood sizes (Eberhart and Shi, 2001)
         Swarm size of 20-50 most common.
@@ -340,7 +341,8 @@ class PSO(object):
         Keyword arguments:
         itr -- current timestep
         max_itr -- maximum number of timesteps
-
+        parallel_view -- IPython.parallel.client.view.LoadBalancedView instance 
+                         for parallel objective function evaluation.
         """
         if self.topo in ("von_neumann", "ring"):
             # For each particle:
@@ -460,7 +462,7 @@ class PSO(object):
         sleep(sleep_dur)
 
     def opt(self, max_itr = 100, tol_thres = None, tol_win = 5, parallel_view = False, 
-            plot = False, save_plots = False):
+            plot = False, save_plots = False, callback = None):
         """Attempt to find the global optimum objective function.
 
         Keyword args:
@@ -469,6 +471,10 @@ class PSO(object):
                      the number of dimensions.  Can be ndarray, tuple or list.
         tol_win -- number of timesteps for which the swarm best position must be 
                    less than convergence tolerances for the funtion to then return a result
+        parallel_view -- use the IPython parallel cluster associated with a particular
+                         IPython.parallel.client.view.LoadBalancedView instance enable
+                         the parallel execution of objective functions at each timestep.
+        callback -- callback function that is executed per timestep as 'callback(self, itr)'
 
         Returns:
          -- swarm best position
@@ -491,6 +497,8 @@ class PSO(object):
             # Run timestep code
             self.swarm_best_hist[itr], self.swarm_best_perf_hist[itr] = \
                     self._tstep(itr, max_itr, parallel_view)
+            if callback is not None:
+                callback(self, itr)
             
             if plot:
                 self.plot_swarm(itr, xlims = (-50,50), ylims = (-50,50), contours_delta = 1., sleep_dur = 0.001, save_plots = save_plots )
