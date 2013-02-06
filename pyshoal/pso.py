@@ -51,7 +51,7 @@ class PSO(object):
     55, 760-765.
 
     """
-    def __init__(self, obj_func, init_var_ranges, n_parts = 5, topo="gbest", weights = [0.9, 0.4, 2.1, 2.1], opt_args = None, bounds = None, minimise = True, parallel_view = None):
+    def __init__(self, obj_func, init_var_ranges, n_parts = 5, topo="gbest", weights = [0.9, 0.4, 2.1, 2.1], opt_args = None, box_bounds = None, minimise = True, parallel_view = None):
         """Initialise the positions and velocities of the particles, the particle memories and the swarm-level params.
 
         Keyword args:
@@ -67,7 +67,7 @@ class PSO(object):
         opt_args -- dictionary of keyword arguments to be passed to the 
                     objective function; these arguments do not correspond to 
                     variables that are to be optimised
-        bounds -- tuple of (lower_bound, upper_bound) tuples (or equivalent 
+        box_bounds -- tuple of (lower_bound, upper_bound) tuples (or equivalent 
                   ndarray), the length of the former being the number of 
                   dimensions e.g. ((0,10),(0,30)) for 2 dims.  
                   Restricted damping is used (Xu and Rahmat-Samii, 2007) when 
@@ -152,7 +152,7 @@ class PSO(object):
                                    (self._n_parts, self._n_dims))
 
         # Determine the problem space boundaries...
-        self.lower_bounds, self.upper_bounds = np.asfarray(bounds).T
+        self.lower_bounds, self.upper_bounds = np.asfarray(box_bounds).T
 
         # then find the performance per particle
         # (updates self.perf, a matrix of self._n_parts rows and self._n_dims cols)
@@ -320,7 +320,7 @@ class PSO(object):
         too_low = self.pos < self.lower_bounds
         too_high = self.pos > self.upper_bounds
 
-        # Ensure all particles within bounds of problem space
+        # Ensure all particles within box bounds of problem space
         self.pos.clip(self.lower_bounds, self.upper_bounds, out = self.pos)
 
         old_vel = self.vel.copy()
@@ -372,7 +372,7 @@ class PSO(object):
         # if not move to edges of prob space and 
         # flip signs of and dampen velocity components that took particles 
         # over boundaries
-        self._bounds_checking()
+        self._box_bounds_checking()
 
         # Cache the current performance per particle
         ### TIDY ME UP ###
@@ -557,6 +557,6 @@ if __name__ == '__main__':
         raise Exception("objective function {} not supported.".format(sys.argv[1]))
 
     #o = PSO(obj_func = obj_func, init_var_ranges = ((-500,500),(-500,500)), n_parts = 144, topo="gbest", weights=[0.9, 0.4, 1.0, 2.5], minimise=False)
-    o = PSO(obj_func = obj_func, init_var_ranges = ((-50,50),(-50,50)), n_parts = 64, topo="von_neumann", weights=[0.9, 0.4, 2.1, 2.1], bounds=((-5,50),(-5,50)), minimise=False)
+    o = PSO(obj_func = obj_func, init_var_ranges = ((-50,50),(-50,50)), n_parts = 64, topo="von_neumann", weights=[0.9, 0.4, 2.1, 2.1], box_bounds=((-5,50),(-5,50)), minimise=False)
     res = o.opt(max_itr = 100, tol_thres = (0.01,0.01), tol_win=5, plot=True, save_plots=False)
     logger.info("\nBest position: {}\nBest perf: {}\nNum iter: {}\n".format(*res))

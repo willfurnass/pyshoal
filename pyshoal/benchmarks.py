@@ -19,15 +19,15 @@ class Benchmark(object):
             
     def opt(self, n_parts = 25, topo = 'gbest', weights = (0.9, 0.4, 2.1, 2.1), max_itr = 250, tol_win = 5):   
         # Bounds as single col of multiple rows with each of latter being min + max
-        param_bounds = np.tile((self.lower_bound, self.upper_bound), (self.ndim, 1))
+        box_bounds = np.tile((self.lower_bound, self.upper_bound), (self.ndim, 1))
     
         shoal = pso.PSO(self.f, 
-                            init_var_ranges = param_bounds, 
+                            init_var_ranges = box_bounds, 
                             n_parts = n_parts, 
                             topo = topo, 
                             weights = weights, 
                             opt_args = None, 
-                            bounds = param_bounds,
+                            box_bounds = box_bounds,
                             minimise = True)
         
         swarm_best, swarm_best_perf, final_itr = shoal.opt(
