@@ -22,13 +22,12 @@ class Benchmark(object):
         box_bounds = np.tile((self.lower_bound, self.upper_bound), (self.ndim, 1))
     
         shoal = pso.PSO(self.f, 
-                            init_var_ranges = box_bounds, 
-                            n_parts = n_parts, 
-                            topo = topo, 
-                            weights = weights, 
-                            opt_args = None, 
-                            box_bounds = box_bounds,
-                            minimise = True)
+                        box_bounds = box_bounds, 
+                        n_parts = n_parts, 
+                        topo = topo, 
+                        weights = weights, 
+                        opt_args = None, 
+                        minimise = True)
         
         swarm_best, swarm_best_perf, final_itr = shoal.opt(
                 max_itr = max_itr,

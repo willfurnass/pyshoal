@@ -16,13 +16,13 @@ Typical usage::
 
     obj_func = rastrigin
     o = PSO(obj_func = obj_func, 
-            init_var_ranges = ((-500,500),(-500,500)), 
+            box_bounds = ((-500,500),(-500,500)), 
             n_parts = 144, 
-            topo="gbest", 
-            weights=[0.9, 0.4, 1.0, 2.5])
+            topo = "gbest", 
+            weights = [0.9, 0.4, 1.0, 2.5])
     res = o.opt(max_itr = 100, 
                 tol_thres = (0.01,0.01), 
                 tol_win = 5, 
                 plot = True, 
-                save_plots=False)
+                save_plots = False)
 

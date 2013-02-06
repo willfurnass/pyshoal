@@ -51,15 +51,16 @@ class PSO(object):
     55, 760-765.
 
     """
-    def __init__(self, obj_func, init_var_ranges, n_parts = 5, topo="gbest", weights = [0.9, 0.4, 2.1, 2.1], opt_args = None, box_bounds = None, minimise = True, parallel_view = None):
+    def __init__(self, obj_func, box_bounds, n_parts = 5, topo="gbest", weights = [0.9, 0.4, 2.1, 2.1], opt_args = None, minimise = True, parallel_view = None):
         """Initialise the positions and velocities of the particles, the particle memories and the swarm-level params.
 
         Keyword args:
         obj_func -- Objective function
-        init_var_ranges -- tuple of (lower_bound, upper_bound) tuples (or 
-                           equivalent ndarray), the length of the former 
-                           being the number of dimensions e.g. ((0,10),(0,30))
-                           for 2 dimensions
+        box_bounds -- tuple of (lower_bound, upper_bound) tuples (or equivalent 
+                  ndarray), the length of the former being the number of 
+                  dimensions e.g. ((0,10),(0,30)) for 2 dims.  
+                  Restricted damping is used (Xu and Rahmat-Samii, 2007) when 
+                  particles go out of bounds.
         n_parts -- number of particles
         topo -- 'gbest', 'ring' or 'von_neumann'
         weights -- 4-vector of weights for inertial (initial and final), 
@@ -67,11 +68,6 @@ class PSO(object):
         opt_args -- dictionary of keyword arguments to be passed to the 
                     objective function; these arguments do not correspond to 
                     variables that are to be optimised
-        box_bounds -- tuple of (lower_bound, upper_bound) tuples (or equivalent 
-                  ndarray), the length of the former being the number of 
-                  dimensions e.g. ((0,10),(0,30)) for 2 dims.  
-                  Restricted damping is used (Xu and Rahmat-Samii, 2007) when 
-                  particles go out of bounds.
         minimise -- whether to find global minima or maxima for the objective function
         parallel_view -- use the IPython parallel cluster associated with a particular
                          IPython.parallel.client.view.LoadBalancedView instance enable
@@ -126,20 +122,20 @@ class PSO(object):
         # Initialise velocity weights
         self.set_weight(weights)
         
-        # Set ranges used to bound initial particle positions
-        # NB: should really parse init_var_ranges to ensure that it is valid
-        self.init_pos_min, self.init_pos_max = np.asfarray(init_var_ranges).T
+        # Determine the problem space boundaries
+        # NB: should really parse box_bounds to ensure that it is valid
+        self.lower_bounds, self.upper_bounds = np.asfarray(box_bounds).T
 
         # Set number of particles
         self._n_parts = n_parts
 
         # Set number of dimensions
-        self._n_dims = len(init_var_ranges)
+        self._n_dims = len(box_bounds)
 
         # Initialise particle positions
         # Each row is the position vector of a particular particle
-        self.pos = np_rand.uniform(self.init_pos_min, 
-                                   self.init_pos_max, 
+        self.pos = np_rand.uniform(self.lower_bounds, 
+                                   self.upper_bounds, 
                                    (self._n_parts, self._n_dims))
 
         # Previous best position for all particles is starting position
@@ -147,14 +143,11 @@ class PSO(object):
 
         # Initialise velocity matrix
         # Each row is the velocity vector of a particular particle
-        self.vel = np_rand.uniform(- (self.init_pos_max - self.init_pos_min), 
-                                   self.init_pos_max - self.init_pos_min, 
+        self.vel = np_rand.uniform(- (self.upper_bounds - self.lower_bounds), 
+                                   self.upper_bounds - self.lower_bounds, 
                                    (self._n_parts, self._n_dims))
 
-        # Determine the problem space boundaries...
-        self.lower_bounds, self.upper_bounds = np.asfarray(box_bounds).T
-
-        # then find the performance per particle
+        # Find the performance per particle
         # (updates self.perf, a matrix of self._n_parts rows and self._n_dims cols)
         self._eval_perf(parallel_view)
 
@@ -206,7 +199,7 @@ class PSO(object):
                 self.w_societal    = w_societal
 
     def _eval_perf(self, parallel_view = None):
-        if parallel_view is None:
+        if not parallel_view:
             self.perf = self.obj_func_np(*self.pos.T)
         else:
             self.perf = np.array(parallel_view.map(self.obj_func, *_tupleify(self.pos, self.opt_args)).get())
@@ -307,7 +300,7 @@ class PSO(object):
             logger.debug("SOCIETAL V COMP:   {}".format(societal_vel_comp))
             logger.debug("VELOCITIES:        {}".format(self.vel))
             
-    def _bounds_checking(self):
+    def _box_bounds_checking(self):
         """Apply restrictive damping if position updates have caused particles 
         to leave problem space boundaries.
 
@@ -556,7 +549,7 @@ if __name__ == '__main__':
     else:
         raise Exception("objective function {} not supported.".format(sys.argv[1]))
 
-    #o = PSO(obj_func = obj_func, init_var_ranges = ((-500,500),(-500,500)), n_parts = 144, topo="gbest", weights=[0.9, 0.4, 1.0, 2.5], minimise=False)
-    o = PSO(obj_func = obj_func, init_var_ranges = ((-50,50),(-50,50)), n_parts = 64, topo="von_neumann", weights=[0.9, 0.4, 2.1, 2.1], box_bounds=((-5,50),(-5,50)), minimise=False)
+    #o = PSO(obj_func = obj_func, box_bounds = ((-500,500),(-500,500)), n_parts = 144, topo="gbest", weights=[0.9, 0.4, 1.0, 2.5], minimise=False)
+    o = PSO(obj_func = obj_func, box_bounds = ((-50,50),(-50,50)), n_parts = 64, topo="von_neumann", weights=[0.9, 0.4, 2.1, 2.1], minimise=False)
     res = o.opt(max_itr = 100, tol_thres = (0.01,0.01), tol_win=5, plot=True, save_plots=False)
     logger.info("\nBest position: {}\nBest perf: {}\nNum iter: {}\n".format(*res))
