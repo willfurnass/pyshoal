@@ -33,6 +33,7 @@ setup(
     install_requires = [
         "numpy >= 1.5.1",
         "matplotlib >= 1.0.1",
+        "scipy >=0.10",
     ],
 
     #cmdclass = cmdclass,
