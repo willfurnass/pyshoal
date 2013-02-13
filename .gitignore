@@ -6,3 +6,4 @@ pyshoal.egg-info
 *.so
 *swp
 MANIFEST
+*.vim
