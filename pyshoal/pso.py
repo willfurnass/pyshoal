@@ -13,6 +13,9 @@ except:
 
 import collections
 
+# Allow instance methods to be used as objective functions
+import pickle_method
+
 import logging
 #logger.basicConfig(format='%(levelname)s: %(message)s', level=logger.INFO)
 logger = logging.getLogger(__name__)
@@ -219,7 +222,10 @@ class PSO(object):
         if parallel_arch is None:
             self.perf = self.obj_func_vectorized(*self.pos.T)
         elif isinstance(parallel_arch, Pool):
-            self.perf = np.array(parallel_arch.map(self.obj_func, self.pos))
+            if self._n_dims > 1:
+                self.perf = np.array(parallel_arch.map(self.obj_func, *self.pos.T))
+            else:
+                self.perf = np.array(parallel_arch.map(self.obj_func, self.pos))
         else:
             raise Exception("Invalid parallel architecture")
 
