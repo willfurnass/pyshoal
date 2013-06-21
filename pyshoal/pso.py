@@ -63,7 +63,7 @@ class PSO(object):
         particle memories and the swarm-level params.
 
         Keyword args:
-        obj_func -- Objective function
+        obj_func -- Objective function (ref stored in the attribute 'orig_obj_func')
         box_bounds -- tuple of (lower_bound, upper_bound) tuples (or 
                   equivalent ndarray), the length of the former being the 
                   number of dimensions e.g. ((0,10),(0,30)) for 2 dims.  
@@ -114,25 +114,27 @@ class PSO(object):
         # Whether to minimise or maximise the objective function
         self.minimise = minimise
 
-        # Store refs to the objective function and opt_args
-        # which are then used if parallel_arch is not None
-        # to evaluate the objective function in parallel per PSO timestep
-        self.obj_func = obj_func
+        # Store refs to the original objective function and opt_args
+        self.orig_obj_func = obj_func
         self.opt_args = opt_args
-        
-        # If the objective function evaluation is not to be done in parallel
-        # then we create a vectorised partial function from the objecive function, 
-        # baking in arguments that are not parameters to be optimised
-        if opt_args:
-            obj_partial_func = lambda *args : obj_func(*args+tuple(opt_args))
-            self.obj_func_np = np.vectorize(obj_partial_func)
+
+        # If the objective function doesn't requires additional arguments that don't 
+        # correspond to the dimensions of the problem space:
+        if not opt_args or len(opt_args) < 1:
+            # Create a vectorized version of that function 
+            # for fast single-threaded execution
+            self.obj_func_vectorized = np.vectorize(self.orig_obj_func)
+            # Create new reference for multi-threaded evaluation 
+            # using a multiprocessing.Pool workpool
+            self.obj_func = self.orig_obj_func
         else:
-            self.obj_func_np = np.vectorize(obj_func)
-
-        # If the objective function evaluation is to be parallelised then
-        # we wrap the function and its invariant arguments using a function object 
-        self.part_func = PartFuncObj(obj_func, *opt_args)
-
+            # Create a vectorized, partial form of that function 
+            # for fast single-threaded evaluation
+            self.obj_func_vectorized = np.vectorize(lambda *args : self.orig_obj_func(*args + tuple(opt_args)))
+            # Also create a partial form of that function using a function object 
+            # for multi-threaded evaluation using a multiprocessing.Pool workpool
+            self.obj_func = PartFuncObj(self.orig_obj_func, *opt_args) 
+        
         # Initialise velocity weights
         self.set_weight(weights)
         
@@ -215,12 +217,9 @@ class PSO(object):
 
     def _eval_perf(self, parallel_arch = None):
         if parallel_arch is None:
-            self.perf = self.obj_func_np(*self.pos.T)
+            self.perf = self.obj_func_vectorized(*self.pos.T)
         elif isinstance(parallel_arch, Pool):
-            self.perf = np.array(parallel_arch.map(self.part_func, self.pos))
-        #elif isinstance(parallel_arch, LoadBalancedView):
-            #obj_func_args = tuple(arr_2d.T) + tuple(([i] * arr_2d.shape[0] for i in opt_arg_tuple))
-            #self.perf = np.array(parallel_arch.map(self.obj_func, *obj_func_args).get())
+            self.perf = np.array(parallel_arch.map(self.obj_func, self.pos))
         else:
             raise Exception("Invalid parallel architecture")
 
@@ -388,8 +387,6 @@ class PSO(object):
         self._box_bounds_checking()
 
         # Cache the current performance per particle
-        ### TIDY ME UP ###
-        #self.perf = self.obj_func_np(*self.pos.T)
         self._eval_perf(parallel_arch)
 
         # Update each particle's personal best position if an improvement has been made this timestep
@@ -441,7 +438,7 @@ class PSO(object):
                 x = np.arange(xlims[0], xlims[1], contours_delta)
                 y = np.arange(ylims[0], ylims[1], contours_delta)
                 self._contour_X, self._contour_Y = np.meshgrid(x, y)
-                self._contour_Z = self.obj_func_np(self._contour_X, self._contour_Y)
+                self._contour_Z = self.obj_func_vectorized(self._contour_X, self._contour_Y)
         else:
             self._plt_swarm_ax.clear()
             self._plt_perf_ax.clear()
@@ -474,7 +471,7 @@ class PSO(object):
             self._plt_fig.savefig("%03d.png" % itr)
         sleep(sleep_dur)
 
-    def opt(self, max_itr = 100, tol_thres = None, tol_win = 5, parallel_arch = False, 
+    def opt(self, max_itr = 100, tol_thres = None, tol_win = 5, parallel_arch = None, 
             plot = False, save_plots = False, callback = None):
         """Attempt to find the global optimum objective function.
 
