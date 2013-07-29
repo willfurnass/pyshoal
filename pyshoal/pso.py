@@ -60,7 +60,7 @@ class PSO(object):
 
     """
     def __init__(self, obj_func, box_bounds, n_parts = 5, topo="gbest", 
-                       weights = [0.9, 0.4, 2.1, 2.1], opt_args = None, 
+                       weights = [0.9, 0.4, 2.1, 2.1], extra_args = None, 
                        minimise = True, parallel_arch = None):
         """Initialise the positions and velocities of the particles, the 
         particle memories and the swarm-level params.
@@ -76,7 +76,7 @@ class PSO(object):
         topo -- 'gbest', 'ring' or 'von_neumann'
         weights -- 4-vector of weights for inertial (initial and final), 
                    nostalgic and societal velocity components
-        opt_args -- dictionary of keyword arguments to be passed to the 
+        extra_args -- dictionary of keyword arguments to be passed to the 
                     objective function; these arguments do not correspond to 
                     variables that are to be optimised
         minimise -- whether to find global minima or maxima for the objective 
@@ -117,13 +117,13 @@ class PSO(object):
         # Whether to minimise or maximise the objective function
         self.minimise = minimise
 
-        # Store refs to the original objective function and opt_args
+        # Store refs to the original objective function and extra_args
         self.orig_obj_func = obj_func
-        self.opt_args = opt_args
+        self.extra_args = extra_args
 
         # If the objective function doesn't requires additional arguments that don't 
         # correspond to the dimensions of the problem space:
-        if not opt_args or len(opt_args) < 1:
+        if not extra_args or len(extra_args) < 1:
             # Create a vectorized version of that function 
             # for fast single-threaded execution
             self.obj_func_vectorized = np.vectorize(self.orig_obj_func)
@@ -133,10 +133,10 @@ class PSO(object):
         else:
             # Create a vectorized, partial form of that function 
             # for fast single-threaded evaluation
-            self.obj_func_vectorized = np.vectorize(lambda *args : self.orig_obj_func(*args + tuple(opt_args)))
+            self.obj_func_vectorized = np.vectorize(lambda *args : self.orig_obj_func(*args + tuple(extra_args)))
             # Also create a partial form of that function using a function object 
             # for multi-threaded evaluation using a multiprocessing.Pool workpool
-            self.obj_func = PartFuncObj(self.orig_obj_func, *opt_args) 
+            self.obj_func = PartFuncObj(self.orig_obj_func, *extra_args) 
         
         # Initialise velocity weights
         self.set_weight(weights)

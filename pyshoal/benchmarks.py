@@ -26,7 +26,7 @@ class Benchmark(object):
                         n_parts = n_parts, 
                         topo = topo, 
                         weights = weights, 
-                        opt_args = None, 
+                        extra_args = None, 
                         minimise = True)
         
         swarm_best, swarm_best_perf, final_itr = shoal.opt(
