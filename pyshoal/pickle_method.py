@@ -1,4 +1,5 @@
 # Allow instance methods to be used as class methods
+from __future__ import absolute_import
 
 def _pickle_method(method):
     func_name = method.im_func.__name__
@@ -16,8 +17,11 @@ def _unpickle_method(func_name, obj, cls):
             break
     return func.__get__(obj, cls)
 
-import copy_reg
+try:
+    import copy_reg as copyreg
+except ImportError:
+    import copyreg 
 import types
 
-copy_reg.pickle(types.MethodType, _pickle_method, _unpickle_method)
+copyreg.pickle(types.MethodType, _pickle_method, _unpickle_method)
 

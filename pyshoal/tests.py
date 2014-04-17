@@ -1,4 +1,5 @@
-from benchmarks import *
+from __future__ import absolute_import
+from .benchmarks import *
 
 def test_01a():
     res_01a = bmark_01a.opt()

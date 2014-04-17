@@ -1,3 +1,6 @@
+from __future__ import absolute_import, print_function
+
+
 import numpy as np
 import numpy.random as np_rand
 
@@ -14,7 +17,7 @@ except:
 import collections
 
 # Allow instance methods to be used as objective functions
-import pickle_method
+from . import pickle_method
 
 import logging
 #logger.basicConfig(format='%(levelname)s: %(message)s', level=logger.INFO)
@@ -562,7 +565,7 @@ def obj_func_parabola(a,b):
 if __name__ == '__main__':
     import sys
     if len(sys.argv) < 2: 
-        print "Need objective function name as argument."
+        print("Need objective function name as argument.")
         sys.exit(-1)
     if sys.argv[1] == 'quadratic':
         obj_func = obj_func_quadratic
