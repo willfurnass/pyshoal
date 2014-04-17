@@ -223,9 +223,9 @@ class PSO(object):
             self.perf = self.obj_func_vectorized(*self.pos.T)
         elif isinstance(parallel_arch, Pool):
             if self._n_dims > 1:
-                self.perf = np.array(parallel_arch.map(self.obj_func, *self.pos.T))
+                self.perf = np.array(parallel_arch.map(self.obj_func, self.pos.T))
             else:
-                self.perf = np.array(parallel_arch.map(self.obj_func, self.pos))
+                self.perf = np.array(parallel_arch.map(self.obj_func, self.pos)) # need to package self.pos here as one-element iterable?
         else:
             raise Exception("Invalid parallel architecture")
 
