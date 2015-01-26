@@ -1,4 +1,4 @@
-from __future__ import absolute_import, print_function
+from __future__ import absolute_import, print_function, division
 
 
 import numpy as np
@@ -13,6 +13,12 @@ try:
     from multiprocessing.pool import Pool
 except:
     pass
+
+# For Python 3 compatibility
+try:
+    xrange
+except NameError:
+    xrange = range
 
 import collections
 
@@ -288,8 +294,8 @@ class PSO(object):
                     p,                                             # particle
                     (p - n_sqrt) % n,                              # p'cle above
                     (p + n_sqrt) % n,                              # p'cle below
-                    ((p / n_sqrt) * n_sqrt) + ((p + 1) % n_sqrt),  # p'cle to r
-                    ((p / n_sqrt) * n_sqrt) + ((p - 1) % n_sqrt)   # p'cle to l
+                    ((p // n_sqrt) * n_sqrt) + ((p + 1) % n_sqrt),  # p'cle to r
+                    ((p // n_sqrt) * n_sqrt) + ((p - 1) % n_sqrt)   # p'cle to l
                     ]
         elif self.topo == "ring":
             self.neighbourhoods = np.zeros((n, 3), dtype=int)
