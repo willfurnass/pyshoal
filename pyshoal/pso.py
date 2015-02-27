@@ -161,6 +161,8 @@ class PSO(object):
         # Determine the problem space boundaries
         # NB: should really parse box_bounds to ensure that it is valid
         self.lower_bounds, self.upper_bounds = np.asfarray(box_bounds).T
+        if np.any(self.lower_bounds >= self.upper_bounds):
+            raise ValueError("All lower bounds must be < upper bounds")
 
         # Set number of particles
         self._n_parts = n_parts
