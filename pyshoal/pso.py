@@ -8,11 +8,11 @@ from time import sleep
 import matplotlib.pyplot as plt
 import sys
 
-try:
-    from IPython.parallel.client.view import LoadBalancedView
-    from multiprocessing.pool import Pool
-except:
-    pass
+# try:
+#     from IPython.parallel.client.view import LoadBalancedView
+#     from multiprocessing.pool import Pool
+# except:
+#     pass
 
 # For Python 3 compatibility
 try:
@@ -98,9 +98,9 @@ class PSO(object):
                     function
         parallel_arch -- fitness function evaluation during swarm instantiation
                          can optionally be done using master/slave
-                         parallelisation if parallel_arch is either a
-                         IPython.parallel.client.view.LoadBalancedView
-                         instance or a multiprocessing.Pool instance.
+                         parallelisation if parallel_arch is a
+                         IPython.parallel.client.view.LoadBalancedView or
+                         multiprocessing.pool.Pool instance.
 
         Notes on swarm and neighbourhood sizes (Eberhart and Shi, 2001)
         Swarm size of 20-50 most common.
@@ -134,7 +134,7 @@ class PSO(object):
 
         # Store refs to the original objective function and extra_args
         self.orig_obj_func = obj_func
-        self.extra_args = extra_args
+        self.extra_args = tuple(extra_args) if extra_args else None
 
         # If the objective function doesn't requires additional arguments that
         # don't correspond to the dimensions of the problem space:
@@ -143,17 +143,23 @@ class PSO(object):
             # for fast single-threaded execution
             self.obj_func_vectorized = np.vectorize(self.orig_obj_func)
             # Create new reference for multi-threaded evaluation
-            # using a multiprocessing.Pool workpool
+            # using a multiprocessing.pool.Pool workpool
             self.obj_func = self.orig_obj_func
         else:
             # Create a vectorized, partial form of that function
             # for fast single-threaded evaluation
-            self.obj_func_vectorized = np.vectorize(
-                lambda *args: self.orig_obj_func(*args + tuple(extra_args)))
+            self.obj_func_vectorized = np.vectorize(lambda args:
+                self.orig_obj_func(*(args + self.extra_args)))
             # Also create a partial form of that function using a function
             # object for multi-threaded evaluation using a
-            # multiprocessing.Pool workpool
-            self.obj_func = PartFuncObj(self.orig_obj_func, *extra_args)
+            # multiprocessing.pool.Pool workpool
+            # self.obj_func = PartFuncObj(self.orig_obj_func, *self.extra_args)
+            self.obj_func_vectorized = np.vectorize(
+                lambda *args: self.orig_obj_func(*args + tuple(extra_args)))
+
+            # TESTING
+            self.obj_func_test = lambda args: self.orig_obj_func(*(args +
+                                                                self.extra_args))
 
         # Initialise velocity weights
         self.set_weight(weights)
@@ -184,6 +190,9 @@ class PSO(object):
         self.vel = np_rand.uniform(- (self.upper_bounds - self.lower_bounds),
                                    self.upper_bounds - self.lower_bounds,
                                    (self._n_parts, self._n_dims))
+
+        # Check parallel_arch is supported and return type
+        self.parallel_arch_type = _get_parallel_arch_type(parallel_arch)
 
         # Find the performance per particle
         # (updates self.perf, a matrix of self._n_parts rows and
@@ -250,13 +259,21 @@ class PSO(object):
     def _eval_perf(self, parallel_arch=None):
         if parallel_arch is None:
             self.perf = self.obj_func_vectorized(*self.pos.T)
-        elif isinstance(parallel_arch, Pool):
+        elif self.parallel_arch_type == 'multiprocessing.pool':
             if self._n_dims > 1:
                 self.perf = np.array(parallel_arch.map(self.obj_func,
                                                        self.pos.T))
             else:
                 # Need to package self.pos here as one-element iterable?
                 self.perf = np.array(parallel_arch.map(self.obj_func, self.pos))
+        # TESTING START
+        elif self.parallel_arch_type == 'IPython.parallel':
+            #self.perf = parallel_arch.apply_sync(self.obj_func,
+            #                                     *self.pos.T)
+            #parallel_arch.scatter('pos', self.pos)
+            #parallel_arch.push({'obj_func': self.obj_func})
+            self.perf = np.array(parallel_arch.map(self.obj_func, *self.pos.T))
+            # TESTING END
         else:
             raise Exception("Invalid parallel architecture")
 
@@ -599,6 +616,20 @@ class PSO(object):
             plt.show()
         return self.swarm_best, self.swarm_best_perf, itr
 # END class PSO
+
+
+def _get_parallel_arch_type(p_arch):
+    if p_arch is None:
+        return None
+    fqcn = p_arch.__module__ + '.' + p_arch.__class__.__name__
+    #if fqcn == 'IPython.parallel.client.view.LoadBalancedView':
+    if fqcn == 'IPython.parallel.client.view.DirectView':
+        parallel_arch_type = 'IPython.parallel'
+    elif fqcn == 'multiprocessing.pool.Pool':
+        parallel_arch_type = 'multiprocessing.pool'
+    else:
+        raise Exception("Parallel architecture 'fqcn' not supported")
+    return parallel_arch_type
 
 
 def obj_func_1(x, y, z):
