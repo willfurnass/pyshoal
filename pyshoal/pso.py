@@ -8,12 +8,6 @@ from time import sleep
 import matplotlib.pyplot as plt
 import sys
 
-# try:
-#     from IPython.parallel.client.view import LoadBalancedView
-#     from multiprocessing.pool import Pool
-# except:
-#     pass
-
 # For Python 3 compatibility
 try:
     xrange
@@ -21,9 +15,6 @@ except NameError:
     xrange = range
 
 import collections
-
-# Allow instance methods to be used as objective functions
-from . import pickle_method
 
 import logging
 # logger.basicConfig(format='%(levelname)s: %(message)s', level=logger.INFO)
@@ -40,19 +31,6 @@ def set_log_level(level):
     """ Allow quick setting of module-level logging. """
     logger.setLevel(level)
     logger.handlers[0].setLevel(level)
-
-
-class PartFuncObj(object):
-    def __init__(self, f, *args):
-        """Initialise a partial function object using a function and a set of
-        invariant arguments"""
-        self.f = f
-        self.fixed_args = list(args)
-
-    def __call__(self, vari_args_iterable):
-        """When instance called as function run the enclosed function with
-        static and per-call args"""
-        return self.f(*list(vari_args_iterable) + self.fixed_args)
 
 
 class PSO(object):
@@ -75,7 +53,7 @@ class PSO(object):
     """
     def __init__(self, obj_func, box_bounds, n_parts=5, topo="gbest",
                  weights=[0.9, 0.4, 2.1, 2.1], extra_args=None,
-                 minimise=True, parallel_arch=None):
+                 minimise=True):
         """Initialise the positions and velocities of the particles, the
         particle memories and the swarm-level params.
 
@@ -96,11 +74,6 @@ class PSO(object):
                     variables that are to be optimised
         minimise -- whether to find global minima or maxima for the objective
                     function
-        parallel_arch -- fitness function evaluation during swarm instantiation
-                         can optionally be done using master/slave
-                         parallelisation if parallel_arch is a
-                         IPython.parallel.client.view.LoadBalancedView or
-                         multiprocessing.pool.Pool instance.
 
         Notes on swarm and neighbourhood sizes (Eberhart and Shi, 2001)
         Swarm size of 20-50 most common.
@@ -124,11 +97,7 @@ class PSO(object):
         NB sum of nostalgia and societal weights should be >4 if using
         Clerc's constriction factor.
 
-        Notes on parallel objective function evaluation:
-        This may not be efficient if a single call to the objective function
-        takes very little time to execute.
         """
-
         # Whether to minimise or maximise the objective function
         self.minimise = minimise
 
@@ -140,26 +109,11 @@ class PSO(object):
         # don't correspond to the dimensions of the problem space:
         if not extra_args or len(extra_args) < 1:
             # Create a vectorized version of that function
-            # for fast single-threaded execution
             self.obj_func_vectorized = np.vectorize(self.orig_obj_func)
-            # Create new reference for multi-threaded evaluation
-            # using a multiprocessing.pool.Pool workpool
-            self.obj_func = self.orig_obj_func
         else:
             # Create a vectorized, partial form of that function
-            # for fast single-threaded evaluation
             self.obj_func_vectorized = np.vectorize(lambda args:
                 self.orig_obj_func(*(args + self.extra_args)))
-            # Also create a partial form of that function using a function
-            # object for multi-threaded evaluation using a
-            # multiprocessing.pool.Pool workpool
-            # self.obj_func = PartFuncObj(self.orig_obj_func, *self.extra_args)
-            self.obj_func_vectorized = np.vectorize(
-                lambda *args: self.orig_obj_func(*args + tuple(extra_args)))
-
-            # TESTING
-            self.obj_func_test = lambda args: self.orig_obj_func(*(args +
-                                                                self.extra_args))
 
         # Initialise velocity weights
         self.set_weight(weights)
@@ -191,13 +145,10 @@ class PSO(object):
                                    self.upper_bounds - self.lower_bounds,
                                    (self._n_parts, self._n_dims))
 
-        # Check parallel_arch is supported and return type
-        self.parallel_arch_type = _get_parallel_arch_type(parallel_arch)
-
         # Find the performance per particle
         # (updates self.perf, a matrix of self._n_parts rows and
         # self._n_dims cols)
-        self._eval_perf(parallel_arch)
+        self._eval_perf()
 
         # The personal best position per particle is initially the starting
         # position
@@ -256,26 +207,8 @@ class PSO(object):
             if w_societal is not None:
                 self.w_societal = w_societal
 
-    def _eval_perf(self, parallel_arch=None):
-        if parallel_arch is None:
-            self.perf = self.obj_func_vectorized(*self.pos.T)
-        elif self.parallel_arch_type == 'multiprocessing.pool':
-            if self._n_dims > 1:
-                self.perf = np.array(parallel_arch.map(self.obj_func,
-                                                       self.pos.T))
-            else:
-                # Need to package self.pos here as one-element iterable?
-                self.perf = np.array(parallel_arch.map(self.obj_func, self.pos))
-        # TESTING START
-        elif self.parallel_arch_type == 'IPython.parallel':
-            #self.perf = parallel_arch.apply_sync(self.obj_func,
-            #                                     *self.pos.T)
-            #parallel_arch.scatter('pos', self.pos)
-            #parallel_arch.push({'obj_func': self.obj_func})
-            self.perf = np.array(parallel_arch.map(self.obj_func, *self.pos.T))
-            # TESTING END
-        else:
-            raise Exception("Invalid parallel architecture")
+    def _eval_perf(self):
+        self.perf = self.obj_func_vectorized(*self.pos.T)
 
     def _cache_neighbourhoods(self, topo):
         """Determines the indices of the neighbours per particle and stores them
@@ -415,15 +348,12 @@ class PSO(object):
         if np.any(too_low) or np.any(too_high):
             raise Exception("Need multiple-pass bounds checking")
 
-    def _tstep(self, itr, max_itr, parallel_arch=None):
+    def _tstep(self, itr, max_itr):
         """Optimisation timestep function
 
         Keyword arguments:
         itr -- current timestep
         max_itr -- maximum number of timesteps
-        parallel_arch -- IPython.parallel.client.view.LoadBalancedView
-                         or multiprocessing.Pool instance for parallel objective
-                         function evaluation.
         """
         if self.topo in ("von_neumann", "ring"):
             # For each particle, find the 'relative' index of the best
@@ -457,7 +387,7 @@ class PSO(object):
         self._box_bounds_checking()
 
         # Cache the current performance per particle
-        self._eval_perf(parallel_arch)
+        self._eval_perf()
 
         # Update each particle's personal best position if an improvement has
         # been made this timestep
@@ -549,8 +479,8 @@ class PSO(object):
             self._plt_fig.savefig("%03d.png" % itr)
         sleep(sleep_dur)
 
-    def opt(self, max_itr=100, tol_thres=None, tol_win=5, parallel_arch=None,
-            plot=False, save_plots=False, callback=None):
+    def opt(self, max_itr=100, tol_thres=None, tol_win=5, plot=False,
+            save_plots=False, callback=None):
         """Attempt to find the global optimum objective function.
 
         Keyword args:
@@ -561,11 +491,6 @@ class PSO(object):
         tol_win -- number of timesteps for which the swarm best position must be
                    less than convergence tolerances for the funtion to then
                    return a result
-        parallel_arch -- fitness function evaluation at each PSO timestep
-                         can optionally be expedited using master/slave
-                         parallelisation if parallel_arch is either a
-                         IPython.parallel.client.view.LoadBalancedView
-                         instance or a multiprocessing.Pool instance.
 
         callback -- callback function that is executed per timestep as
                     'callback(self, itr)'
@@ -591,7 +516,7 @@ class PSO(object):
         while itr < max_itr:
             # Run timestep code
             self.swarm_best_hist[itr], self.swarm_best_perf_hist[itr] = \
-                self._tstep(itr, max_itr, parallel_arch)
+                self._tstep(itr, max_itr)
             if callback is not None:
                 callback(self, itr)
 
@@ -616,20 +541,6 @@ class PSO(object):
             plt.show()
         return self.swarm_best, self.swarm_best_perf, itr
 # END class PSO
-
-
-def _get_parallel_arch_type(p_arch):
-    if p_arch is None:
-        return None
-    fqcn = p_arch.__module__ + '.' + p_arch.__class__.__name__
-    #if fqcn == 'IPython.parallel.client.view.LoadBalancedView':
-    if fqcn == 'IPython.parallel.client.view.DirectView':
-        parallel_arch_type = 'IPython.parallel'
-    elif fqcn == 'multiprocessing.pool.Pool':
-        parallel_arch_type = 'multiprocessing.pool'
-    else:
-        raise Exception("Parallel architecture 'fqcn' not supported")
-    return parallel_arch_type
 
 
 def obj_func_1(x, y, z):
