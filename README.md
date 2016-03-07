@@ -1,6 +1,6 @@
 # pyshoal
 
-## An implementation of [Particle Swarm Optimisation][pso] in Python.
+### An implementation of [Particle Swarm Optimisation][pso] in Python
 
 Typical usage:
 
@@ -31,7 +31,7 @@ results = my_pso.opt(max_itr=100,
 (swarm_best, swarm_best_perf, n_itrs) = results
 ```
 
-Please see the docstrings in `pso.py` for more info on pyshoal usage.
+Please see the docstrings in [pso.py](pyshoal/pso.py) for more info on pyshoal usage.
 
 Note that pyshoal originally allowed for parallel execution of the objective function at each PSO step.  This is not presently supported.
 
