@@ -140,7 +140,7 @@ c = np.array([
 def f_21(x_0, x_1, x_2, x_3):
     """Low-dimensional function with only a few local minima."""
     x = np.array([x_0, x_1, x_2, x_3])
-    return - np.sum([(np.dot((x - a[i]).T, (x - a[i])) + c[i]) ** -1 for i in xrange(4)])
+    return - np.sum([(np.dot((x - a[i]).T, (x - a[i])) + c[i]) ** -1 for i in range(4)])
 
 
 bmark_21 = Benchmark(name='f_21', f=f_21, ndim=4, lower_bound=0.0,
