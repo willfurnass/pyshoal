@@ -63,3 +63,4 @@ docs/_build/
 
 MANIFEST
 .ropeproject
+.mypy_cache/
