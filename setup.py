@@ -1,49 +1,50 @@
-from distutils.core import setup
-from distutils.extension import Extension
+import io
 import os
 
-# Utility function to read the README file.
-# Used for the long_description.  It's nice, because now 1) we have a top level
-# README file and 2) it's easier to type in the README file than to put a raw
-# string in below ...
-def read(fname):
-        return open(os.path.join(os.path.dirname(__file__), fname)).read()
+from setuptools import find_packages, setup
 
-#try:
-#    from Cython.Distutils import build_ext
-#except ImportError:
-#    use_cython = False
-#else:
-#    use_cython = True
+with open("README.md", "r") as f:
+    long_description = f.read()
 
-#cmdclass = dict()
-#ext_modules = list()
+pkgname = 'pyshoal'
 
-#if use_cython:
-#    ext_modules.append(Extension("pyshoal.similarity_metrics", [ "pyshoal/similarity_metrics.pyx" ]))
-#    cmdclass['build_ext'] = build_ext
-#else:
-#   ext_modules.append(Extension("pyshoal.similarity_metrics", [ "pyshoal/similarity_metrics.c" ]))
+version_namespace = {}
+here = os.path.abspath(os.path.dirname(__file__))
+with io.open(os.path.join(here, pkgname, '_version.py'), encoding='utf8') as f:
+    exec(f.read(), {}, version_namespace)
+
 
 setup(
-    name = 'pyshoal', # Y
-    version = '0.1.3', # Y
-    packages=['pyshoal'],#, 'pyshoal.test'],
-
-    install_requires = [
-        "numpy >= 1.5.1",
-        "matplotlib >= 1.0.1",
-        "scipy >=0.10",
-    ],
-
-    #cmdclass = cmdclass,
-    #ext_modules=ext_modules,
-
+    name=pkgname,
+    description='Particle Swarm Optimisation implementation.',
+    version=version_namespace['__version__'],
     author = 'Will Furnass',
     author_email = 'will@thearete.co.uk',
-    description='Particle Swarm Optimisation implementation.',
-    license='GPL 3.0',
-    keywords='particle swarm optimisation optimization',
-    #url='http://pypi.python.org/pypi/PyShoal/',
-    long_description=read('README.txt'),
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    url='https://github.com/willfurnass/pyshoal',
+    packages=find_packages(),
+    package_dir={'': '.'},
+    license='GPL-3.0',
+    install_requires=[
+        'numpy >= 1.5.1',
+        'matplotlib >= 1.0.1',
+        'scipy >=0.10',
+    ],
+    extras_require={
+        'test': [
+            'pytest',
+            'pytest-cov',
+            ],
+        #'docs': [
+        #    'sphinx',
+        #],
+    },
+    classifiers=[
+        "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+        "Operating System :: OS Independent",
+        "Programming Language :: Python",
+        "Programming Language :: Python :: 3",
+        "Topic :: Scientific/Engineering :: Mathematics",
+    ]
 )

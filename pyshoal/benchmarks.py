@@ -1,21 +1,23 @@
-from __future__ import absolute_import
-import numpy as np
-from . import pso
+"""Benchmark functions.
 
-
-"""
-Benchmark functions taken from:
+Notes
+-----
+Taken from:
 
 Yao, X., and Liu, Y. (1996). Fast evolutionary programming. In Proceedings of
 the Fifth Annual Conference on Evolutionary Programming (Vol. 19). Cambridge,
 MA: The MIT Press.
 
 """
+import numpy as np
+from . import pso
 
 
 class Benchmark(object):
+    """TODO"""
     def __init__(self, name, f, ndim, lower_bound, upper_bound, optimal_params,
                  optimal_perf, params_tol_dp, perf_tol_dp=4):
+        """TODO"""
         self.name = name
         self.f = f
         self.ndim = ndim
@@ -32,8 +34,9 @@ class Benchmark(object):
                                                           min_calc_val,
                                                           self.optimal_perf))
 
-    def opt(self, n_parts=25, topo='gbest', weights=(0.9, 0.4, 2.1, 2.1),
+    def opt(self, n_parts=25, topo='von_neumann', weights=(0.9, 0.4, 2.1, 2.1),
             max_itr=250, tol_win=5):
+        """TODO"""
         # Bounds as single col of multiple rows with each of latter being min +
         # max
         box_bounds = np.tile((self.lower_bound, self.upper_bound),
@@ -49,8 +52,9 @@ class Benchmark(object):
         return BenchmarkResult(self, swarm_best, swarm_best_perf, final_itr)
 
 
-class BenchmarkResult(object):
+class BenchmarkResult():
     def __init__(self, benchmark, swarm_best, swarm_best_perf, final_itr):
+        """TODO"""
         self.benchmark = benchmark
         self.swarm_best = swarm_best
         self.swarm_best_perf = swarm_best_perf
@@ -67,6 +71,7 @@ class BenchmarkResult(object):
             < perf_tol
 
     def __str__(self):
+        """TODO"""
         if self.check():
             s = "Found global opt for func {} of {} ~= {} at {} in " + \
                 "{} itrs".format(self.benchmark.name, self.swarm_best_perf,
@@ -84,6 +89,7 @@ class BenchmarkResult(object):
 # Specific benchmark functions and Benchmark objects
 
 def f_01(*x):
+    """TODO"""
     return np.sum(np.asarray(x) ** 2)
 
 bmark_01a = Benchmark(name='f_01a', f=f_01, ndim=30, lower_bound=-5.12,
@@ -93,6 +99,7 @@ bmark_01a = Benchmark(name='f_01a', f=f_01, ndim=30, lower_bound=-5.12,
 
 
 def f_16(x_0, x_1):
+    """TODO"""
     return (4*(x_0**2)) - (2.1*(x_0**4)) + ((1/3.0)*(x_0**6)) + (x_0*x_1) - \
            (4*(x_1**2)) + (4*(x_1**4))
 
@@ -102,6 +109,7 @@ bmark_16 = Benchmark(name='f_16', f=f_16, ndim=2, lower_bound=-5.0,
 
 
 def f_17(x_0, x_1):
+    """TODO"""
     return (x_1 - (5.1 / (4 * (np.pi**2))*(x_0**2)) + ((5./np.pi) * x_0) - 6)**2 \
         + (10 * (1-(1/(8*np.pi))) * np.cos(x_0)) + 10
 
@@ -112,6 +120,7 @@ bmark_17 = Benchmark(name='f_17', f=f_17, ndim=2, lower_bound=-5.0,
 
 
 def f_18(x_0, x_1):
+    """TODO"""
     a = x_0 + x_1 + 1
     b = 19 - (14*x_0) + (3*(x_0**2)) - (14*x_1) + (6*x_0*x_1) + (3*(x_1**2))
     c = (2*x_0) - (3*x_1)

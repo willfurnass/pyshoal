@@ -1,31 +1,32 @@
-from __future__ import absolute_import, print_function, division
+from collections import abc
+import logging
+import sys
+from time import sleep
+from typing import (
+    Callable,
+    Dict,
+    Iterable,
+    Optional,
+    Sequence,
+    Tuple,
+    Union)
 
-
+import matplotlib.pyplot as plt
 import numpy as np
 import numpy.random as np_rand
-
-from time import sleep
-import matplotlib.pyplot as plt
-import sys
 
 # try:
 #     from IPython.parallel.client.view import LoadBalancedView
 #     from multiprocessing.pool import Pool
+#     ParallelArch = Union[IPython.parallel.client.view.LoadBalancedView,
+#                          multiprocessing.pool.Pool]
 # except:
 #     pass
 
-# For Python 3 compatibility
-try:
-    xrange
-except NameError:
-    xrange = range
-
-import collections
 
 # Allow instance methods to be used as objective functions
 from . import pickle_method
 
-import logging
 # logger.basicConfig(format='%(levelname)s: %(message)s', level=logger.INFO)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -36,30 +37,59 @@ _handler.setFormatter(_formatter)
 logger.addHandler(_handler)
 
 
-def set_log_level(level):
-    """ Allow quick setting of module-level logging. """
+def set_log_level(level: str):
+    """Allow quick setting of module-level logging.
+    
+    Parameters
+    -------------
+    level
+        Logging level.
+
+    """
     logger.setLevel(level)
     logger.handlers[0].setLevel(level)
 
 
-class PartFuncObj(object):
-    def __init__(self, f, *args):
+class PartFuncObj():
+    def __init__(self,
+                 f: Callable,
+                 *args) -> None:
         """Initialise a partial function object using a function and a set of
-        invariant arguments"""
+        invariant arguments.
+        
+        Parameters
+        ----------
+        f
+            Objective function.
+        *args
+            Constant arguments to supply to this function on every invocation.
+
+        """
         self.f = f
         self.fixed_args = list(args)
 
-    def __call__(self, vari_args_iterable):
+    def __call__(self, vari_args_iterable: Iterable[object]) -> object:
         """When instance called as function run the enclosed function with
-        static and per-call args"""
+        static and per-call args.
+
+        Parameters
+        ----------
+        vari_args_iterable
+            Arguments to supply to this function on a particular invocation.
+
+        Returns
+        -------
+        Return value of encapsulated function.
+
+        """
         return self.f(*list(vari_args_iterable) + self.fixed_args)
 
 
-class PSO(object):
-    """
-    Particle Swarm Optimisation implementation
+class PSO():
+    """Particle Swarm Optimisation implementation.
 
-    References:
+    Notes
+    -----
     Eberhart, R.C., Shi, Y., 2001. Particle swarm optimization: developments,
     applications and resources, in: Proceedings of the 2001 Congress on
     Evolutionary Computation. Presented at the Congress on Evolutionary
@@ -73,60 +103,90 @@ class PSO(object):
     55, 760-765.
 
     """
-    def __init__(self, obj_func, box_bounds, n_parts=5, topo="gbest",
-                 weights=[0.9, 0.4, 2.1, 2.1], extra_args=None,
-                 minimise=True, parallel_arch=None):
+    def __init__(self,
+                 obj_func: Callable,
+                 box_bounds: Union[Sequence[float], Sequence[Tuple[float, float]]],
+                 n_parts: int = 5,
+                 topo: str = 'gbest',
+                 weights: Sequence[float] = [0.9, 0.4, 2.1, 2.1],
+                 extra_args: Optional[Dict[str, object]] = None,
+                 minimise: bool = True,
+                 parallel_arch=None) -> None:
         """Initialise the positions and velocities of the particles, the
         particle memories and the swarm-level params.
 
-        Keyword args:
-        obj_func -- Objective function (ref stored in the attribute
-                    'orig_obj_func')
-        box_bounds -- tuple of (lower_bound, upper_bound) tuples (or
-                  equivalent ndarray), the length of the former being the
-                  number of dimensions e.g. ((0,10),(0,30)) for 2 dims.
-                  Restricted damping is used (Xu and Rahmat-Samii, 2007) when
-                  particles go out of bounds.
-        n_parts -- number of particles
-        topo -- 'gbest', 'ring' or 'von_neumann'
-        weights -- 4-vector of weights for inertial (initial and final),
-                   nostalgic and societal velocity components
-        extra_args -- dictionary of keyword arguments to be passed to the
-                    objective function; these arguments do not correspond to
-                    variables that are to be optimised
-        minimise -- whether to find global minima or maxima for the objective
-                    function
-        parallel_arch -- fitness function evaluation during swarm instantiation
-                         can optionally be done using master/slave
-                         parallelisation if parallel_arch is a
-                         IPython.parallel.client.view.LoadBalancedView or
-                         multiprocessing.pool.Pool instance.
+        Parameters
+        ----------
+        obj_func
+            Objective function (ref stored in the attribute ``orig_obj_func``).
+        box_bounds
+            Tuple of (lower_bound, upper_bound) tuples (or equivalent ndarray),
+            the length of the former being the number of dimensions e.g.
+            ((0,10),(0,30)) for 2 dims.  Restricted damping is used (Xu and
+            Rahmat-Samii, 2007) when particles go out of bounds.
+        n_parts
+            Number of particles.  Swarm size of 20-50 most common (Eberhart and
+            Shi, 2001).  Neighbourhood size of ~15% swarm size used in many
+            applications.
+        topo
+            Swarm communication topology (``gbest``, ``ring`` or
+            ``von_neumann``).  See notes below.
+        weights
+            4-vector of weights for inertial (initial and final), nostalgic and
+            societal velocity components.
+        extra_args
+            Dictionary of keyword arguments to be passed to the objective
+            function; these arguments do not correspond to variables that are
+            to be optimised.
+        minimise
+            Whether to find global minima or maxima for the objective function.
+        parallel_arch 
+            Fitness function evaluation during swarm instantiation can
+            optionally be done using master/slave parallelisation if
+            parallel_arch is a
+            ``IPython.parallel.client.view.LoadBalancedView`` or
+            ``multiprocessing.pool.Pool`` instance.
 
-        Notes on swarm and neighbourhood sizes (Eberhart and Shi, 2001)
-        Swarm size of 20-50 most common.
-        Neighbourhood size of ~15% swarm size used in many applications.
+        Notes
+        -----
 
-        Notes on topologies:
+        Topologies
+        ^^^^^^^^^^
+
         Two neighbourhood topologies have been implemented (see Kennedy and
         Mendes, 2002).  These are both social rather than geographic
         topologies and differ in terms of degree of connectivity (number of
         neighbours per particle) but not in terms of clustering (number of
         common neighbours of two particles).  The supported topologies are:
-        ring -- exactly two neighbours / particle
-        von_neumann -- exactly four neighbours / particle (swarm size must
-                       be square number)
-        gbest -- the neighbourhood of each particle is the entire swarm
 
-        Notes on weights (Eberhart and Shi, 2001, Xu and Rahmat-Samii, 2007):
-        inertia weight   -- decrese linearly from 0.9 to 0.4 over a run
-        nostalgia weight -- 2.05
-        societal weight -- 2.05
-        NB sum of nostalgia and societal weights should be >4 if using
-        Clerc's constriction factor.
+        ``ring``
+           Exactly two neighbours / particle
+        ``von_neumann``
+           Exactly four neighbours / particle (swarm size must be square
+           number)
+        ``gbest``
+           The neighbourhood of each particle is the entire swarm
 
-        Notes on parallel objective function evaluation:
+        Weights
+        ^^^^^^^
+        Suggestions from Eberhart and Shi, 2001 and from Xu and Rahmat-Samii,
+        2007:
+
+        Inertia weight
+           Decrese linearly from 0.9 to 0.4 over a run
+        Nostalgia weight
+           2.05
+        Societal weight
+           2.05
+
+        NB sum of nostalgia and societal weights should be > 4 if using Clerc's
+        constriction factor.
+
+        Parallel objective function evaluation
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
         This may not be efficient if a single call to the objective function
         takes very little time to execute.
+
         """
 
         # Whether to minimise or maximise the objective function
@@ -220,32 +280,42 @@ class PSO(object):
         # Determine particle neighbours if a swarm topology has been chosen
         self._cache_neighbourhoods(topo)
 
-    def set_weight(self, w_inertia_start=None, w_inertia_end=None,
-                   w_nostalgia=None, w_societal=None):
+    def set_weight(self,
+                   w_inertia_start: float = None,
+                   w_inertia_end: float = None,
+                   w_nostalgia: float = None,
+                   w_societal: float = None) -> None:
+        """Set velocity component weights.
+
+        Parameters
+        ----------
+        w_inertia_start
+            Particle inertia weight at first iteration (recommended value:
+            0.9).
+        w_inertia_end
+            Particle inertia weight at maximum possible iteration (recommended
+            value: 0.4).
+        w_nostalgia
+            Weight for velocity component in direction of particle historical
+            best performance (recommended value: 2.1).
+        w_societal
+            Weight for velocity component in direction of current best
+            performing particle in neighbourhood (recommended value: 2.1).
+
+        Notes
+        -----
+        Can set all four weights simultanously by passing the method an
+        iterable object of length 4 e.g.: ::
+
+
+           weights = [0.9, 0.4, 2.1, 2.1]
+           my_pyshoal.set_weight(weights)
+
         """
-        Set velocity component weights
-
-        Keyword arguments:
-        w_inertia_start -- particle inertia weight at first iteration
-                           (recommended value: 0.9)
-        w_inertia_end -- particle inertia weight at maximum possible iteration
-                         (recommended value: 0.4)
-        w_nostalgia -- weight for velocity component in direction of particle
-                       historical best performance (recommended value: 2.1)
-        w_societal -- weight for velocity component in direction of current
-                      best performing particle in neighbourhood (recommended
-                      value: 2.1)
-
-        NB can set all four weights simultanously by passing the method an
-        iterable object of length 4 e.g.:
-
-        weights = [0.9, 0.4, 2.1, 2.1]
-        my_pyshoal.set_weight(weights)
-        """
-        if isinstance(w_inertia_start, collections.Iterable) and \
+        if isinstance(w_inertia_start, abc.Iterable) and \
                 len(w_inertia_start) == 4 and None not in w_inertia_start:
-            self.w_inertia_start, self.w_inertia_end, \
-                self.w_nostalgia, self.w_societal = w_inertia_start
+            (self.w_inertia_start, self.w_inertia_end,
+             self.w_nostalgia, self.w_societal) = w_inertia_start
         else:
             if w_inertia_start is not None:
                 self.w_inertia_start = w_inertia_start
@@ -256,7 +326,19 @@ class PSO(object):
             if w_societal is not None:
                 self.w_societal = w_societal
 
-    def _eval_perf(self, parallel_arch=None):
+    def _eval_perf(self, parallel_arch=None) -> None:
+        """Evaluate the objective function.
+
+        Parameters
+        ----------
+        parallel_arch:
+            Fitness function evaluation during swarm instantiation can
+            optionally be done using master/slave parallelisation if
+            parallel_arch is an
+            ``IPython.parallel.client.view.LoadBalancedView`` or
+            ``multiprocessing.pool.Pool`` instance.
+
+        """
         if parallel_arch is None:
             self.perf = self.obj_func_vectorized(*self.pos.T)
         elif self.parallel_arch_type == 'multiprocessing.pool':
@@ -277,18 +359,28 @@ class PSO(object):
         else:
             raise Exception("Invalid parallel architecture")
 
-    def _cache_neighbourhoods(self, topo):
+    def _cache_neighbourhoods(self, topo: str) -> None:
         """Determines the indices of the neighbours per particle and stores them
         in the neighbourhoods attribute.
 
+        Parameters
+        ----------
+        topo
+            Name of the topology.
+
+        Notes
+        -----
         Currently only the following topologies are supported (see Kennedy and
         Mendes, 2002):
 
-        'gbest' - Global best (no local particle neighbourhoods)
-        'von_neumann' -- Von Neumann lattice (each particle communicates with
-                         four social neighbours)
-        'ring' -- Ring topology (each particle communicates with two social
-                  neighbours)
+        ``gbest``
+           Global best (no local particle neighbourhoods)
+        ``von_neumann``
+           Von Neumann lattice (each particle communicates with four social
+           neighbours)
+        ``ring``
+           Ring topology (each particle communicates with two social
+           neighbours)
 
         """
         self.topo = topo
@@ -308,7 +400,7 @@ class PSO(object):
                                 "square if using Von Neumann neighbourhood " +
                                 "topologies.")
             self.neighbourhoods = np.zeros((n, 5), dtype=int)
-            for p in xrange(n):
+            for p in range(n):
                 self.neighbourhoods[p] = [
                     p,                                             # particle
                     (p - n_sqrt) % n,                              # p'cle above
@@ -318,38 +410,50 @@ class PSO(object):
                     ]
         elif self.topo == "ring":
             self.neighbourhoods = np.zeros((n, 3), dtype=int)
-            for p in xrange(n):
+            for p in range(n):
                 self.neighbourhoods[p] = [
                     (p - 1) % n,  # particle to left
                     p,            # particle itself
                     (p + 1) % n   # particle to right
                     ]
 
-    def _velocity_updates(self, itr, max_itr, use_constr_factor=True):
+    def _velocity_updates(self,
+                          itr: int,
+                          max_itr: int,
+                          use_constr_factor: bool = True) -> None:
         """Update particle velocities.
 
-        Keyword arguments:
-        itr     -- current timestep
-        max_itr -- maximum number of timesteps
-        use_constr_factor -- whether Clerc's constriction factor should be
-                             applied
+        Parameters
+        ----------
+        itr
+            Number of current timestep.
+        max_itr
+            Maximum number of timesteps.
+        use_constr_factor
+            Whether Clerc's constriction factor should be applied.
 
-        New velocities determined using
-         - the supplied velocity factor weights
-         - random variables to ensure the process is not deterministic
-         - the current velocity per particle
-         - the best performing position in each particle's personal history
-         - the best performing current position in each particle's neighbourhood
+        Notes
+        -----
+
+        New velocities determined using:
+
+        * The supplied velocity factor weights;
+        * Random variables to ensure the process is not deterministic;
+        * The current velocity per particle;
+        * The best performing position in each particle's personal history;
+        * The best performing current position in each particle's neighbourhood.
 
         Max velocities clamped to length of problem space boundaries and
         Clerc's constriction factor applied as per Eberhart and Shi (2001)
 
-        Spits out the following if logging level is INFO
-         - best neighbours per particle
-         - velocity components per particle
-         - velocities per particle
+        Spits out the following if logging level is INFO:
 
-        NB should only be called from the VCDM class's _tstep method.
+        * Best neighbours per particle;
+        * Velocity components per particle;
+        * Velocities per particle.
+
+        ..
+            NB should only be called from the VCDM class's ``_tstep`` method.
         """
         w_inertia = self.w_inertia_start + \
             (self.w_inertia_end - self.w_inertia_start) * \
@@ -388,6 +492,9 @@ class PSO(object):
         """Apply restrictive damping if position updates have caused particles
         to leave problem space boundaries.
 
+        Notes
+        -----
+
         Restrictive damping explained in:
         Xu, S., Rahmat-Samii, Y. (2007). Boundary conditions in particle swarm
         optimization revisited. IEEE Transactions on Antennas and Propagation,
@@ -415,15 +522,27 @@ class PSO(object):
         if np.any(too_low) or np.any(too_high):
             raise Exception("Need multiple-pass bounds checking")
 
-    def _tstep(self, itr, max_itr, parallel_arch=None):
-        """Optimisation timestep function
+    def _tstep(self,
+               itr: int,
+               max_itr: int,
+               parallel_arch=None) -> Tuple[np.ndarray, np.ndarray]:
+        """Optimisation timestep function.
 
-        Keyword arguments:
-        itr -- current timestep
-        max_itr -- maximum number of timesteps
-        parallel_arch -- IPython.parallel.client.view.LoadBalancedView
-                         or multiprocessing.Pool instance for parallel objective
-                         function evaluation.
+        Parameters
+        ----------
+        itr
+            Number of current timestep.
+        max_itr
+            Maximum number of timesteps.
+        parallel_arch
+            ``IPython.parallel.client.view.LoadBalancedView`` or
+            ``multiprocessing.Pool`` instance for parallel objective function
+            evaluation.
+
+        Returns
+        -------
+            Tuple of swarm best position and swarm best performance.
+
         """
         if self.topo in ("von_neumann", "ring"):
             # For each particle, find the 'relative' index of the best
@@ -484,18 +603,30 @@ class PSO(object):
 
         return self.swarm_best, self.swarm_best_perf
 
-    def plot_swarm(self, itr, xlims, ylims, contours_delta=None, sleep_dur=0.1,
-                   save_plots=False):
+    def plot_swarm(self,
+                   itr: int,
+                   xlims: Tuple[float, float],
+                   ylims: Tuple[float, float],
+                   contours_delta: float = None,
+                   sleep_dur: float = 0.1,
+                   save_plots: bool = False) -> None:
         """Plot the swarm in 2D along with performance vs iterations.
 
-        Keyword arguments:
-        itr -- current interation (integer)
-        xlims -- tuple of min and max x bounds to use for plotting the swarm
-        ylims -- tuple of min and max y bounds to use for plotting the swarm
-        contours_delta -- delta used for producing contours of objective
-                          function. Set to 'None' to disable contour plotting.
-        sleep_dur -- time to sleep for between iterations / plots (seconds)
-        save_plots -- save plots as a series of png images if True
+        Parameters
+        ----------
+        itr
+            Number of current interation.
+        xlims
+            x-axis bounds for plotting the swarm.
+        ylims
+            y-axis bounds for plotting the swarm.
+        contours_delta
+            Delta used for producing contours of objective function. Leave as
+            ``None`` to disable contour plotting.
+        sleep_dur
+            Time to sleep for between iterations / plots (seconds).
+        save_plots
+            Save plots as a series of png images if ``True``.
 
         """
         if itr == 0:
@@ -522,7 +653,8 @@ class PSO(object):
 
         # Plot contours
         if contours_delta:
-            cplot = self._plt_swarm_ax.contour(self._contour_X, self._contour_Y,
+            cplot = self._plt_swarm_ax.contour(self._contour_X,
+                                               self._contour_Y,
                                                self._contour_Z)
             self._plt_swarm_ax.clabel(cplot, inline=1, fontsize=10)
 
@@ -549,31 +681,40 @@ class PSO(object):
             self._plt_fig.savefig("%03d.png" % itr)
         sleep(sleep_dur)
 
-    def opt(self, max_itr=100, tol_thres=None, tol_win=5, parallel_arch=None,
-            plot=False, save_plots=False, callback=None):
+    def opt(self,
+            max_itr: int = 100,
+            tol_thres: Sequence = None,
+            tol_win: int = 5,
+            parallel_arch=None,
+            plot: bool = False,
+            save_plots: bool = False,
+            callback: Callable = None) -> Tuple[np.ndarray, np.ndarray, int]:
         """Attempt to find the global optimum objective function.
 
-        Keyword args:
-        max_itr -- maximum number of iterations
-        tol_thres -- convergence tolerance vector (optional); length must be
-                     equal to the number of dimensions.  Can be ndarray, tuple
-                     or list.
-        tol_win -- number of timesteps for which the swarm best position must be
-                   less than convergence tolerances for the funtion to then
-                   return a result
-        parallel_arch -- fitness function evaluation at each PSO timestep
-                         can optionally be expedited using master/slave
-                         parallelisation if parallel_arch is either a
-                         IPython.parallel.client.view.LoadBalancedView
-                         instance or a multiprocessing.Pool instance.
+        Parameters
+        ----------
+        max_itr
+            Maximum number of iterations.
+        tol_thres
+            Convergence tolerance vector; length must be equal to the number of
+            dimensions.
+        tol_win
+            Number of timesteps for which the swarm best position must be less
+            than convergence tolerances for the funtion to then return a
+            result.
+        parallel_arch
+            Fitness function evaluation at each PSO timestep can optionally be
+            expedited using master/slave parallelisation if parallel_arch is
+            either a ``IPython.parallel.client.view.LoadBalancedView``
+            instance or a ``multiprocessing.Pool`` instance.
+        callback
+            Callback function that is executed per timestep as
+            ``callback(self, itr)``
 
-        callback -- callback function that is executed per timestep as
-                    'callback(self, itr)'
-
-        Returns:
-         -- swarm best position
-         -- performance at that position
-         -- iterations taken to converge
+        Returns
+        -------
+            Swarm best position, Performance at that position, iterations taken
+            to converge.
 
         """
         if plot:
@@ -584,7 +725,7 @@ class PSO(object):
 
         self.tol_thres = np.asfarray(tol_thres)
         if self.tol_thres.shape != (self._n_dims,):
-            raise Exception("The length of the tolerance vector must be " +
+            raise Exception("The length of the tolerance vector must be "
                             "equal to the number of dimensions")
 
         itr = 0
@@ -608,7 +749,7 @@ class PSO(object):
                     break
             itr += 1
             if itr >= max_itr:
-                logger.info("PSO failed to converge within " +
+                logger.info("PSO failed to converge within "
                             "{} iterations.".format(max_itr))
 
         if plot:
